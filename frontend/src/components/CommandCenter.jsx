@@ -29,7 +29,7 @@ export default function CommandCenter() {
   const measureLineSourceIdRef = useRef("measure-line");
   const hoverPopupRef = useRef(null);
 
-  const [mapStyle, setMapStyle] = useState("normal");
+  const [mapStyle, setMapStyle] = useState("light");
   const [city, setCity] = useState("madrid");
   const [cities, setCities] = useState([]);
   const [eventsData, setEventsData] = useState(null);
@@ -85,8 +85,10 @@ export default function CommandCenter() {
   const [contextFeature, setContextFeature] = useState(null);   // dropped-on incident
   const [radialMmod, setRadialMmod] = useState(null);
   const [radialMmodOpen, setRadialMmodOpen] = useState(false);
-  const [pickingMode, setPickingMode] = useState(false);        // when RadialCommand asks the user to click 2 map points
-  const [sideEntries, setSideEntries] = useState([]);           // right-edge contextual cards
+  const [pickingMode, setPickingMode] = useState(false);        // when RadialCommand asks the user to click map points
+  const [pickingTarget, setPickingTarget] = useState(null);      // origin | destination | null
+  const [sideEntries, setSideEntries] = useState([]);
+  const [radialProfile, setRadialProfile] = useState(null);           // right-edge contextual cards
 
   const pushSideEntry = useCallback((entry) => {
     setSideEntries((arr) => {
@@ -166,7 +168,9 @@ export default function CommandCenter() {
     else map.once("styledata", ready);
   }, [radialOrigin, radialDest, mapStyle, mapReady]);
 
-  // Map click → set origin / destination based on radial picking mode
+  // Map click → set origin / destination based on radial picking mode.
+  // If the orb requested a concrete target, only that point is modified.
+  // If no target is specified, we keep the old sequential behaviour.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -176,27 +180,34 @@ export default function CommandCenter() {
 
     const onClick = (e) => {
       const lngLat = [e.lngLat.lng, e.lngLat.lat];
-      if (!radialOrigin) {
+      const target = pickingTarget || (!radialOrigin ? "origin" : "destination");
+
+      if (target === "origin") {
         setRadialOrigin(lngLat);
         addLog(`[RADIAL] INICIO fijado · ${lngLat[1].toFixed(4)},${lngLat[0].toFixed(4)}`, "ok");
         pushSideEntry({
           id: "origin",
           title: "INICIO",
           value: `${lngLat[1].toFixed(4)} , ${lngLat[0].toFixed(4)}`,
-          meta: "Click para modificar la posición",
+          meta: "Punto elegido en el mapa · editable",
           color: "#4ade80",
         });
-      } else if (!radialDest) {
+        if (pickingTarget) {
+          setPickingMode(false);
+          setPickingTarget(null);
+        }
+      } else {
         setRadialDest(lngLat);
         addLog(`[RADIAL] DESTINO fijado · ${lngLat[1].toFixed(4)},${lngLat[0].toFixed(4)}`, "ok");
         pushSideEntry({
           id: "destination",
           title: "DESTINO",
           value: `${lngLat[1].toFixed(4)} , ${lngLat[0].toFixed(4)}`,
-          meta: "Click 'Optimizar' para ruta multimodal",
+          meta: "Punto elegido en el mapa · editable",
           color: "#fbbf24",
         });
         setPickingMode(false);
+        setPickingTarget(null);
       }
     };
     map.on("click", onClick);
@@ -205,7 +216,7 @@ export default function CommandCenter() {
       map.off("click", onClick);
       if (map.getCanvas()) map.getCanvas().style.cursor = "";
     };
-  }, [pickingMode, radialOrigin, radialDest, expertMode, measureMode, addLog, mapReady, pushSideEntry]);
+  }, [pickingMode, pickingTarget, radialOrigin, expertMode, measureMode, addLog, mapReady, pushSideEntry]);
 
   // Detect when the radial control is dropped over an incident → set as context
   const handleRadialDrop = useCallback((pt) => {
@@ -1129,6 +1140,91 @@ export default function CommandCenter() {
     });
   };
 
+  const handleRadialBootstrap = async ({ name, locationQuery, useGeolocation }) => {
+    setRadialProfile({ name: name || "Visitor", locationQuery, useGeolocation });
+    setMapStyle("light");
+    setExpertMode(false);
+    pushSideEntry({
+      id: "operator",
+      title: "OPERADOR",
+      value: name || "Visitor",
+      meta: useGeolocation ? "Localización del navegador solicitada" : `Ubicación escrita: ${locationQuery || "—"}`,
+      color: "#22d3ee",
+    });
+
+    if (useGeolocation && navigator.geolocation && mapRef.current) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const coords = [pos.coords.longitude, pos.coords.latitude];
+        mapRef.current?.flyTo({ center: coords, zoom: 15, duration: 1300 });
+        addLog(`[BOOT] ${name || "Visitor"} centrado con ubicación del navegador`, "ok");
+      }, async () => {
+        if (locationQuery) await handleSetPointFromText("boot", locationQuery);
+      });
+      return;
+    }
+
+    if (locationQuery) {
+      addLog(`[BOOT] Geocoding ubicación inicial: ${locationQuery}`, "info");
+      try {
+        const r = await geocode(locationQuery);
+        if (mapRef.current && r) {
+          mapRef.current.flyTo({ center: [r.lon, r.lat], zoom: 14, duration: 1300 });
+          addLog(`[BOOT] Vista inicial centrada en ${r.display_name?.slice(0, 45) || locationQuery}`, "ok");
+        }
+      } catch (e) {
+        addLog(`[BOOT] No se pudo geocodificar ubicación inicial: ${e.message}`, "err");
+      }
+    }
+  };
+
+  const handleSetPointFromText = async (field, query) => {
+    if (!query?.trim()) return;
+    addLog(`[RADIAL] Geocoding ${field}: ${query}`, "info");
+    try {
+      const r = await geocode(query);
+      if (!r) return;
+      const coords = [r.lon, r.lat];
+      if (field === "origin") {
+        setRadialOrigin(coords);
+        pushSideEntry({ id: "origin", title: "INICIO", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#4ade80" });
+      } else if (field === "destination") {
+        setRadialDest(coords);
+        pushSideEntry({ id: "destination", title: "DESTINO", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#fbbf24" });
+      } else if (field === "boot") {
+        mapRef.current?.flyTo({ center: coords, zoom: 14, duration: 1300 });
+      }
+      mapRef.current?.flyTo({ center: coords, zoom: 14, duration: 1100 });
+      addLog(`[RADIAL] ${field.toUpperCase()} localizado`, "ok");
+    } catch (e) {
+      addLog(`[RADIAL] Geocode falló: ${e.message}`, "err");
+    }
+  };
+
+  const handleRouteOption = (item) => {
+    if (!item?.id) return;
+    const titleMap = {
+      compute: "OPTIMIZADO",
+      transport: "TRANSPORTES",
+      destination_parking: "PARKING DESTINO",
+      fuel_route: "GASOLINERAS RUTA",
+      poi_route: "PUNTOS DE INTERÉS",
+      avoid_tolls: "EVITAR PEAJES",
+      set_origin: "INICIO",
+      set_destination: "DESTINO",
+    };
+    pushSideEntry({
+      id: `action-${item.id}`,
+      title: titleMap[item.id] || item.label || item.id,
+      value: item.value || item.label || item.id,
+      meta: item.desc || "Acción seleccionada desde el orbe",
+      color: item.id === "avoid_tolls" ? "#c084fc" : item.id === "destination_parking" ? "#fbbf24" : "#22d3ee",
+    });
+    if (item.action === "destination_parking") setShowParking(true);
+    if (item.action === "poi_route") setShowMobility(true);
+    if (item.action === "fuel_route") setShowEVPanel(true);
+    addLog(`[ORBE] ${item.label || item.id}`, "info");
+  };
+
   const kpi = useMemo(() => {
     if (!eventsData) return { count: 0, critical: 0, warning: 0, info: 0, risk: "—" };
     return {
@@ -1607,16 +1703,16 @@ export default function CommandCenter() {
         destination={radialDest}
         transportMode={radialSel.mode}
         onTransportChange={(m) => setRadialSel((s) => ({ ...s, mode: m }))}
-        onStartPicking={() => { setRadialOrigin(null); setRadialDest(null); setPickingMode(true); addLog("[RADIAL] Modo crosshair · click en mapa", "info"); }}
-        onResetPoints={() => { setRadialOrigin(null); setRadialDest(null); setRadialMmod(null); setRadialMmodOpen(false); setPickingMode(false); setSideEntries([]); }}
+        onStartPicking={(target) => { setPickingTarget(target || null); setPickingMode(true); addLog(`[RADIAL] Modo crosshair · click en mapa${target ? ` para ${target}` : ""}`, "info"); }}
+        onResetPoints={() => { setRadialOrigin(null); setRadialDest(null); setRadialMmod(null); setRadialMmodOpen(false); setPickingMode(false); setPickingTarget(null); setSideEntries((arr) => arr.filter((x) => x.id === "operator")); }}
         onReversePoints={() => { setRadialOrigin(radialDest); setRadialDest(radialOrigin); }}
         getMainMap={() => mapRef.current}
         mapReady={mapReady}
         mainMapStyle={STYLES[mapStyle].style}
         sideEntries={sideEntries}
         onEntryEdit={(e) => {
-          if (e.id === "origin")      { setRadialOrigin(null); setPickingMode(true); }
-          else if (e.id === "destination") { setRadialDest(null); setPickingMode(true); }
+          if (e.id === "origin")      { setRadialOrigin(null); setPickingTarget("origin"); setPickingMode(true); }
+          else if (e.id === "destination") { setRadialDest(null); setPickingTarget("destination"); setPickingMode(true); }
           addLog(`[CTX ] Modificar ${e.title}`, "info");
         }}
         onEntrySave={(e) => addLog(`[CTX ] Guardado ${e.title} (mock)`, "ok")}
@@ -1657,6 +1753,9 @@ export default function CommandCenter() {
         onPickInfo={() => addLog("[INFO] Función en preparación", "info")}
         onSearchNearby={(category) => addLog(`[CERCA] Buscando ${category} (mock)`, "info")}
         onLocateMe={() => locateMe()}
+        onBootstrapComplete={handleRadialBootstrap}
+        onSetPointFromText={handleSetPointFromText}
+        onRouteOption={handleRouteOption}
         onOpenExpert={() => setExpertMode(true)}
         onGeocoderOpen={() => setExpertMode(true)}
         resultText={radialOrigin && radialDest
@@ -1665,7 +1764,7 @@ export default function CommandCenter() {
       />
 
       {/* Minimal status chip (visible in radial mode only) */}
-      {!expertMode && (
+      {!expertMode && radialProfile && (
         <div className="absolute top-4 left-4 z-40 panel px-3 py-2 flex items-center gap-3 pointer-events-none" data-testid="radial-status-chip">
           <div className="live-dot" />
           <div className="font-mono text-[10px] tracking-[0.22em] text-cyan-300">MOMENTUM · {clock.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -1679,7 +1778,7 @@ export default function CommandCenter() {
       )}
 
       {/* Top-right corner: toggle expert HUD + cycle map style */}
-      <div className="absolute top-4 right-4 z-40 flex gap-2">
+      {radialProfile && <div className="absolute top-4 right-4 z-40 flex gap-2">
         <button
           data-testid="toggle-expert-hud"
           onClick={() => setExpertMode((v) => !v)}
@@ -1688,7 +1787,7 @@ export default function CommandCenter() {
         >
           {expertMode ? "▸ MODO SIMPLE" : "▸ MODO EXPERTO"}
         </button>
-      </div>
+      </div>}
 
       {/* Multimodal results overlay (radial mode) */}
       {!expertMode && radialMmodOpen && radialMmod && (

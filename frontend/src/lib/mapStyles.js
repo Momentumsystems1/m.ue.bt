@@ -28,6 +28,30 @@ export const STYLE_NORMAL = {
   ],
 };
 
+
+export const STYLE_LIGHT = {
+  version: 8,
+  name: "MRC Light Clear",
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  sources: {
+    "carto-light": {
+      type: "raster",
+      tiles: [
+        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+      ],
+      tileSize: 256,
+      attribution: "© OpenStreetMap, © CARTO",
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    { id: "bg", type: "background", paint: { "background-color": "#f4f7f9" } },
+    { id: "carto-light", type: "raster", source: "carto-light", paint: { "raster-saturation": -0.08, "raster-contrast": 0.08 } },
+  ],
+};
+
 export const STYLE_SATELLITE = {
   version: 8,
   name: "MRC Satellite",
@@ -165,6 +189,7 @@ export const STYLE_VECTOR_3D = {
 };
 
 export const STYLES = {
+  light: { id: "light", label: "Claro", style: STYLE_LIGHT },
   normal: { id: "normal", label: "Normal", style: STYLE_NORMAL },
   satellite: { id: "satellite", label: "Satélite", style: STYLE_SATELLITE },
   threed: { id: "threed", label: "3D", style: STYLE_3D },

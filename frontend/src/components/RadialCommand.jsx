@@ -43,11 +43,24 @@ const ICON_MAP = {
   Megaphone, Share2, Utensils, ShoppingBag,
 };
 
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+function clampControlPosition(x, y) {
+  if (typeof window === "undefined") return { x, y };
+  const margin = 54;
+  return {
+    x: clamp(x, margin, window.innerWidth - margin),
+    y: clamp(y, margin, window.innerHeight - margin),
+  };
+}
+
 /* =====================================================================
    Planet — a small button orbiting a ring at its angular slot.
    ===================================================================== */
 function Planet({ planet, idx, total, ringRotation, theme, accent, dim, hidden, onHover, onSelect }) {
   const Icon = ICON_MAP[planet.icon] || Info;
+  const planetColor = planet.done ? "#4ade80" : theme.color;
+  const planetGlow = planet.done ? "rgba(74,222,128,0.55)" : theme.glow;
   const safeTotal = Math.max(total || 1, 1);
   const angleDeg = safeTotal === 1 ? -90 : (idx * (360 / safeTotal) - 90);
   const rad = (angleDeg * Math.PI) / 180;
@@ -74,10 +87,10 @@ function Planet({ planet, idx, total, ringRotation, theme, accent, dim, hidden, 
         data-testid={`planet-${planet.id}`}
         aria-label={planet.label || planet.id}
         title={planet.desc || planet.label || planet.id}
-        onClick={(e) => { e.stopPropagation(); onSelect && onSelect(planet); }}
+        onClick={(e) => { e.stopPropagation(); onSelect && onSelect(planet, idx); }}
         onPointerDown={(e) => e.stopPropagation()}
-        onPointerEnter={() => onHover && onHover(planet)}
-        onPointerLeave={() => onHover && onHover(null)}
+        onPointerEnter={(e) => { if (e.pointerType !== "touch") onHover && onHover(planet); }}
+        onPointerLeave={(e) => { if (e.pointerType !== "touch") onHover && onHover(null); }}
         onFocus={() => onHover && onHover(planet)}
         onBlur={() => onHover && onHover(null)}
         animate={{
@@ -91,15 +104,15 @@ function Planet({ planet, idx, total, ringRotation, theme, accent, dim, hidden, 
           width: theme.planet,
           height: theme.planet,
           borderRadius: "50%",
-          background: accent ? theme.color : "rgba(2,10,20,0.9)",
-          border: `1.5px solid ${theme.color}`,
-          color: accent ? "#020a14" : theme.color,
+          background: accent ? planetColor : "rgba(2,10,20,0.9)",
+          border: `1.5px solid ${planetColor}`,
+          color: accent ? "#020a14" : planetColor,
           display: "flex", alignItems: "center", justifyContent: "center",
           cursor: "pointer",
           backdropFilter: "blur(8px)",
           WebkitBackdropFilter: "blur(8px)",
           boxShadow: accent
-            ? `0 0 22px ${theme.glow}, 0 0 44px ${theme.glow}, inset 0 0 8px ${theme.glow}`
+            ? `0 0 22px ${planetGlow}, 0 0 44px ${planetGlow}, inset 0 0 8px ${planetGlow}`
             : `0 0 9px rgba(0,0,0,0.32), inset 0 0 8px rgba(255,255,255,0.04)`,
         }}
       >
@@ -107,9 +120,9 @@ function Planet({ planet, idx, total, ringRotation, theme, accent, dim, hidden, 
       </motion.button>
       {planet.label && (
         <div
-          className="absolute -bottom-5 left-1/2 -translate-x-1/2 font-mono text-[8px] tracking-widest pointer-events-none"
+          className="absolute -bottom-5 left-1/2 -translate-x-1/2 font-mono text-[8px] tracking-widest"
           style={{
-            color: accent ? theme.color : `${theme.color}cc`,
+            color: planet.done ? "#86efac" : (accent ? planetColor : `${planetColor}cc`),
             whiteSpace: "nowrap",
             textShadow: "0 0 7px rgba(0,0,0,0.9)",
             maxWidth: 78,
@@ -217,7 +230,7 @@ function Orbit({ planets, theme, rotation, revealed, accentId, hoverId, dimNonAc
 function Sun({ skin, children, halo }) {
   if (skin === "minimal") {
     return (
-      <div className="absolute inset-0 rounded-full border-[1.5px] border-cyan-300/80 bg-[#020a14]/85 backdrop-blur-2xl flex items-center justify-center pointer-events-none"
+      <div className="absolute inset-0 rounded-full border-[1.5px] border-cyan-300/80 bg-[#020a14]/85 backdrop-blur-2xl flex items-center justify-center"
         style={{ boxShadow: `0 0 16px rgba(34,211,238,0.35), inset 0 0 12px rgba(34,211,238,0.18)` }}>
         {children}
       </div>
@@ -226,7 +239,7 @@ function Sun({ skin, children, halo }) {
   if (skin === "crystal") {
     return (
       <div
-        className="absolute inset-0 backdrop-blur-2xl flex items-center justify-center pointer-events-none"
+        className="absolute inset-0 backdrop-blur-2xl flex items-center justify-center"
         style={{
           background: "linear-gradient(135deg, rgba(30,27,75,0.65) 0%, rgba(2,10,20,0.85) 50%, rgba(131,24,67,0.55) 100%)",
           clipPath: "polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)",
@@ -241,7 +254,7 @@ function Sun({ skin, children, halo }) {
   // GLASS (default) — lighter liquid glass with thin cyan outline
   return (
     <div
-      className="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none overflow-hidden"
+      className="absolute inset-0 rounded-full flex items-center justify-center overflow-hidden"
       style={{
         border: "1.2px solid rgba(165,243,252,0.9)",
         background:
@@ -253,7 +266,7 @@ function Sun({ skin, children, halo }) {
       }}
     >
       {/* Specular highlight */}
-      <div className="absolute -top-1 left-3 right-3 h-5 rounded-full opacity-75 pointer-events-none"
+      <div className="absolute -top-1 left-3 right-3 h-5 rounded-full opacity-75"
            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.7), transparent)", filter: "blur(3px)" }} />
       {halo && (
         <motion.div
@@ -270,7 +283,7 @@ function Sun({ skin, children, halo }) {
 /* Crosshair overlay used for point-pick mode */
 function CrosshairFx() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+    <div className="absolute inset-0 flex items-center justify-center">
       <motion.div
         animate={{ scale: [1, 1.1, 1] }}
         transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
@@ -289,11 +302,12 @@ function CrosshairFx() {
    Side info panel (right edge): list of completed actions w/ ✏ 💾 ✕
    ===================================================================== */
 function SidePanel({
-  entries, actions, systemActions, modeLabel, hoverPlanet, activeSubId,
-  onActionHover, onActionSelect, onSystemAction,
+  entries, actions, steps, stepIdx, stepStatus, systemActions, modeLabel, hoverPlanet, activeSubId,
+  onActionHover, onActionSelect, onStepSelect, onSystemAction,
   onEdit, onSave, onDelete,
 }) {
   const visibleActions = actions || [];
+  const visibleSteps = steps || [];
   return (
     <div
       data-testid="radial-side-panel"
@@ -352,6 +366,51 @@ function SidePanel({
         </div>
       )}
 
+      {!!visibleSteps.length && (
+        <div className="panel-solid p-2.5">
+          <div className="font-mono text-[8px] tracking-[0.28em] text-purple-300/80 mb-2">PASOS DEL FLUJO</div>
+          <div className="grid grid-cols-1 gap-1.5">
+            {visibleSteps.map((step, i) => {
+              const Icon = ICON_MAP[step.icon] || MapPin;
+              const active = i === stepIdx;
+              const done = !!stepStatus?.[step.id];
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  data-testid={`right-step-${step.id}`}
+                  onPointerEnter={() => onActionHover && onActionHover(step)}
+                  onPointerLeave={() => onActionHover && onActionHover(null)}
+                  onClick={(e) => { e.stopPropagation(); onStepSelect && onStepSelect(step, i); }}
+                  className="group w-full flex items-center gap-2 rounded-xl px-2 py-2 border text-left transition-all"
+                  style={{
+                    borderColor: done ? "rgba(74,222,128,0.80)" : active ? "rgba(192,132,252,0.85)" : "rgba(192,132,252,0.22)",
+                    background: done ? "rgba(74,222,128,0.12)" : active ? "rgba(192,132,252,0.13)" : "rgba(2,10,20,0.72)",
+                    boxShadow: active ? "0 0 16px rgba(192,132,252,0.16)" : "none",
+                  }}
+                >
+                  <span
+                    className="flex items-center justify-center rounded-full shrink-0"
+                    style={{
+                      width: 28, height: 28,
+                      border: `1px solid ${done ? "#4ade80" : active ? "#c084fc" : "rgba(192,132,252,0.45)"}`,
+                      color: done ? "#4ade80" : active ? "#c084fc" : "#d8b4fe",
+                      background: "rgba(0,0,0,0.28)",
+                    }}
+                  >
+                    {done ? <Check size={14} /> : <Icon size={14} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[10px] tracking-widest text-cyan-100 uppercase truncate">{step.label}</span>
+                    <span className="block font-mono text-[8px] text-cyan-300/65 leading-snug truncate">{done ? "Punto capturado" : step.prompt}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {!!systemActions?.length && (
         <div className="panel-solid p-2.5">
           <div className="font-mono text-[8px] tracking-[0.28em] text-cyan-300/80 mb-2">OPERACIÓN RÁPIDA</div>
@@ -375,7 +434,7 @@ function SidePanel({
       )}
 
       {!!entries.length && (
-        <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300 px-1 pointer-events-none">HISTORIAL · {entries.length}</div>
+        <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300 px-1">HISTORIAL · {entries.length}</div>
       )}
       <AnimatePresence>
         {(entries || []).map((e) => (
@@ -431,33 +490,59 @@ export default function RadialCommand({
   onStartPicking, onResetPoints, onReversePoints,
   onCompute, onToggleLayer, onPickInfo, onSearchNearby,
   onLocateMe, onOpenExpert, onGeocoderOpen,
+  onBootstrapComplete, onSetPointFromText, onRouteOption,
   transportMode, onTransportChange,
   resultText,
   sideEntries, onEntryEdit, onEntrySave, onEntryDelete,
 }) {
+  // ---------------------------------------------------------------------
+  //  Boot flow: AUTH DEMO → PROFILE/LOCATION → READY.
+  //  Until READY, only the large central orb is visible.
+  // ---------------------------------------------------------------------
+  const [bootStage, setBootStage] = useState("auth");
+  const [visitorName, setVisitorName] = useState("Visitor");
+  const [manualLocation, setManualLocation] = useState("Barcelona");
+  const isReady = bootStage === "ready";
+
+  const bootSize = 286;
+  const controlSize = bootStage !== "ready" ? 350 : CONTAINER;
+  const activeSunSize = bootStage !== "ready" ? bootSize : SUN_DIAMETER;
+
   // ----- drag the whole control around -------------------------------------
-  const [pos, setPos] = useState(() => ({
-    x: typeof window !== "undefined" ? window.innerWidth / 2 : 700,
-    y: typeof window !== "undefined" ? window.innerHeight / 2 : 400,
-  }));
+  const [pos, setPos] = useState(() => clampControlPosition(
+    typeof window !== "undefined" ? window.innerWidth / 2 : 700,
+    typeof window !== "undefined" ? window.innerHeight / 2 : 400,
+  ));
   const [dragging, setDragging] = useState(false);
-  const dragRef = useRef({ pointerX: 0, pointerY: 0, posX: 0, posY: 0 });
+  const dragRef = useRef({ pointerX: 0, pointerY: 0, posX: 0, posY: 0, moved: false });
+  const suppressClickRef = useRef(false);
+  const hoverClearTimer = useRef(null);
+
   const onDragMove = useCallback((e) => {
-    setPos({
-      x: dragRef.current.posX + (e.clientX - dragRef.current.pointerX),
-      y: dragRef.current.posY + (e.clientY - dragRef.current.pointerY),
-    });
+    const dx = e.clientX - dragRef.current.pointerX;
+    const dy = e.clientY - dragRef.current.pointerY;
+    if (Math.hypot(dx, dy) > 4) dragRef.current.moved = true;
+    setPos(clampControlPosition(
+      dragRef.current.posX + dx,
+      dragRef.current.posY + dy,
+    ));
   }, []);
   const onDragEnd = useCallback(() => {
+    if (dragRef.current.moved) {
+      suppressClickRef.current = true;
+      window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+    }
     setDragging(false);
     window.removeEventListener("pointermove", onDragMove);
     window.removeEventListener("pointerup", onDragEnd);
   }, [onDragMove]);
   const onDragStart = (e) => {
     if (e.button !== 0) return;
+    // Onboarding orb should feel like a dialog, not a movable widget.
+    if (!isReady) return;
     e.preventDefault();
     setDragging(true);
-    dragRef.current = { pointerX: e.clientX, pointerY: e.clientY, posX: pos.x, posY: pos.y };
+    dragRef.current = { pointerX: e.clientX, pointerY: e.clientY, posX: pos.x, posY: pos.y, moved: false };
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragEnd);
   };
@@ -468,34 +553,72 @@ export default function RadialCommand({
   const [expanded, setExpanded]   = useState(false);
   const [hoverPlanet, setHoverPlanet] = useState(null);
 
+  const setPreviewPlanet = useCallback((planet) => {
+    if (hoverClearTimer.current) window.clearTimeout(hoverClearTimer.current);
+    if (planet) {
+      setHoverPlanet(planet);
+      return;
+    }
+    hoverClearTimer.current = window.setTimeout(() => setHoverPlanet(null), 90);
+  }, []);
+
+  useEffect(() => () => {
+    if (hoverClearTimer.current) window.clearTimeout(hoverClearTimer.current);
+  }, []);
+
   useEffect(() => {
-    if (!expanded || dragging || minimized) return;
+    if (!expanded || dragging || minimized || !isReady) return;
     const onMove = (e) => {
       const d = Math.hypot(e.clientX - pos.x, e.clientY - pos.y);
-      if (d > 300) setExpanded(false);
+      if (d > 380 && !hoverPlanet) setExpanded(false);
     };
     window.addEventListener("pointermove", onMove);
     return () => window.removeEventListener("pointermove", onMove);
-  }, [expanded, dragging, minimized, pos.x, pos.y]);
+  }, [expanded, dragging, minimized, hoverPlanet, pos.x, pos.y, isReady]);
 
-  // ----- mode + sub-action + steps state -----------------------------------
-  const [mode, setMode]           = useState("main");           // which screen
-  const [activeSubId, setActiveSubId] = useState(null);         // orbit2 planet currently active (e.g. "select_points")
-  const [stepIdx, setStepIdx]     = useState(0);                // index in active sub-action's steps array
-  const [stepStatus, setStepStatus] = useState({});             // { stepId: true } when completed
-  const [bootDone, setBootDone]   = useState(false);            // user has consumed the "Centrar mi posición" prompt
+  // ----- mode + sub-action + route workflow state --------------------------
+  const [mode, setMode] = useState("main");
+  const [activeSubId, setActiveSubId] = useState(null);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [stepStatus, setStepStatus] = useState({});
+  const [pointInput, setPointInput] = useState("");
+  const [pointPickingField, setPointPickingField] = useState(null); // origin | destination | null
 
-  // Hovering the hover-zone in main mode → invite the user to click for locate.
-  // Clicking the zone (not a planet) in main mode runs the default action.
+  const completeBoot = useCallback((payload) => {
+    setBootStage("ready");
+    setExpanded(false);
+    setMode("main");
+    setActiveSubId(null);
+    setPointPickingField(null);
+    const centered = clampControlPosition(
+      typeof window !== "undefined" ? window.innerWidth / 2 : pos.x,
+      typeof window !== "undefined" ? window.innerHeight / 2 : pos.y,
+    );
+    setPos(centered);
+    if (onBootstrapComplete) onBootstrapComplete(payload);
+  }, [onBootstrapComplete, pos.x, pos.y]);
+
+  const submitManualLocation = useCallback(() => {
+    completeBoot({
+      name: visitorName?.trim() || "Visitor",
+      locationQuery: manualLocation?.trim() || "Barcelona",
+      useGeolocation: false,
+    });
+  }, [completeBoot, visitorName, manualLocation]);
+
+  const submitBrowserLocation = useCallback(() => {
+    completeBoot({
+      name: visitorName?.trim() || "Visitor",
+      locationQuery: manualLocation?.trim() || "Barcelona",
+      useGeolocation: true,
+    });
+  }, [completeBoot, visitorName, manualLocation]);
+
   const handleHoverZoneClick = (e) => {
     e.stopPropagation();
-    if (minimized) { setMinimized(false); return; }
-    if (!bootDone && mode === "main" && !expanded) {
-      // First click — fulfil the default question "Centrar mi posición"
-      setBootDone(true);
-      if (onLocateMe) onLocateMe();
-      return;
-    }
+    if (!isReady) return;
+    if (suppressClickRef.current) return;
+    if (minimized) { setMinimized(false); setExpanded(true); return; }
     setExpanded(v => !v);
   };
 
@@ -503,63 +626,104 @@ export default function RadialCommand({
   const orbit2Planets = useMemo(() => planetsFor(mode, "orbit2"), [mode]);
   const orbit2Active  = useMemo(() => activeSubId ? orbit2Planets.find(p => p.id === activeSubId) : null, [orbit2Planets, activeSubId]);
   const orbit3Planets = useMemo(() => orbit2Active?.steps || [], [orbit2Active]);
+  const orbit3RenderedPlanets = useMemo(
+    () => orbit3Planets.map((p) => ({ ...p, done: !!stepStatus[p.id] })),
+    [orbit3Planets, stepStatus]
+  );
 
-  // ----- rotations ----------------------------------------------------------
-  // orbit1 → align macro mode at 12 o'clock when not in main
   const orbit1Rotation = useMemo(() => {
     const cfg = MODES[mode];
     if (!cfg?.activeOrbit1) return 0;
     const idx = indexOfPlanet(orbit1Planets, cfg.activeOrbit1);
     return idx >= 0 ? rotationForSlot(idx, orbit1Planets.length) : 0;
   }, [mode, orbit1Planets]);
-  // orbit2 → align the active sub-action planet
   const orbit2Rotation = useMemo(() => {
     if (!activeSubId) return 0;
     const idx = indexOfPlanet(orbit2Planets, activeSubId);
     return idx >= 0 ? rotationForSlot(idx, orbit2Planets.length) : 0;
   }, [activeSubId, orbit2Planets]);
-  // orbit3 → align the current step at 12 o'clock
   const orbit3Rotation = useMemo(() => rotationForSlot(stepIdx, orbit3Planets.length), [stepIdx, orbit3Planets.length]);
 
-  // ----- reveal state -------------------------------------------------------
-  const revealOrbit1 = expanded && !minimized;
+  const revealOrbit1 = isReady && expanded && !minimized;
   const revealOrbit2 = revealOrbit1 && mode !== "main";
   const revealOrbit3 = revealOrbit2 && orbit3Planets.length > 0;
+  const inCrosshair = !!pointPickingField;
 
-  // ----- crosshair UI ON when orbit3 has steps & the workflow is "select_points"
-  const inCrosshair = revealOrbit3 && activeSubId === "select_points" && stepIdx < orbit3Planets.length;
+  const activePointField = activeSubId === "set_origin" ? "origin" : activeSubId === "set_destination" ? "destination" : null;
+  const activePointLabel = activePointField === "origin" ? "Inicio" : activePointField === "destination" ? "Destino" : "Punto";
 
-  // ----- when the parent fills origin/destination, advance the step -------
+  const startMapPick = useCallback((field) => {
+    const safeField = field || activePointField || "origin";
+    setPointPickingField(safeField);
+    setExpanded(true);
+    setStepStatus((s) => ({ ...s, [`${safeField}-text`]: false }));
+    if (onStartPicking) onStartPicking(safeField);
+    if (onRouteOption) onRouteOption({
+      id: `pick-${safeField}`,
+      icon: safeField === "origin" ? "MapPin" : "Flag",
+      label: safeField === "origin" ? "Inicio en mapa" : "Destino en mapa",
+      desc: "Esperando click sobre el mapa",
+      action: "pick_point",
+      field: safeField,
+    });
+  }, [activePointField, onStartPicking, onRouteOption]);
+
+  const submitPointText = useCallback(() => {
+    const field = activePointField || "origin";
+    const query = pointInput.trim();
+    if (!query) return;
+    setStepStatus((s) => ({ ...s, [`${field}-text`]: true }));
+    if (onSetPointFromText) onSetPointFromText(field, query);
+    if (onRouteOption) onRouteOption({
+      id: `text-${field}`,
+      icon: field === "origin" ? "MapPin" : "Flag",
+      label: field === "origin" ? "Inicio escrito" : "Destino escrito",
+      desc: query,
+      action: "input_point",
+      field,
+    });
+  }, [activePointField, pointInput, onSetPointFromText, onRouteOption]);
+
+  // Parent map filled the requested point → mark map-pick as complete.
   useEffect(() => {
-    if (!inCrosshair) return;
-    const step = orbit3Planets[stepIdx];
-    if (!step) return;
-    const value = step.field === "origin" ? origin : destination;
+    if (!pointPickingField) return;
+    const value = pointPickingField === "origin" ? origin : destination;
     if (!value) return;
-    setStepStatus(s => ({ ...s, [step.id]: true }));
-    const nextIdx = stepIdx + 1;
-    setStepIdx(nextIdx);
-    // When all steps complete, collapse orbit 3 — keep activeSubId so the
-    // orbit-2 selection (e.g. Puntos) stays highlighted in the next session.
-    if (nextIdx >= orbit3Planets.length) {
-      // small delay so the user sees the last step turn green before fade
-      setTimeout(() => setStepIdx(0), 600);
-    }
-  // intentional: react to fresh origin/destination only
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [origin, destination]);
+    setStepStatus((s) => ({ ...s, [`${pointPickingField}-map`]: true }));
+    setPointPickingField(null);
+  }, [origin, destination, pointPickingField]);
 
-  // ----- planet click dispatcher -------------------------------------------
-  const handleSelect = (planet) => {
+  const emitActionToRight = useCallback((planet, extra = {}) => {
+    if (onRouteOption) onRouteOption({ ...planet, ...extra });
+  }, [onRouteOption]);
+
+  const handleSelect = (planet, idx) => {
+    if (!planet) return;
+    if (planet.action === "pick_point") {
+      setStepIdx(typeof idx === "number" ? idx : 0);
+      startMapPick(planet.field);
+      return;
+    }
+    if (planet.action === "input_point") {
+      setStepIdx(typeof idx === "number" ? idx : 0);
+      const field = planet.field || activePointField || "origin";
+      setActiveSubId(field === "origin" ? "set_origin" : "set_destination");
+      setPointInput("");
+      setExpanded(true);
+      return;
+    }
     if (planet.type === "mode" && planet.targetMode) {
       setMode(planet.targetMode);
       setActiveSubId(null);
       setStepIdx(0);
       setStepStatus({});
+      setPointPickingField(null);
+      setExpanded(true);
       return;
     }
     if (planet.type === "toggle") {
       if (onToggleLayer) onToggleLayer(planet.value, true);
+      emitActionToRight(planet);
       return;
     }
     if (planet.type === "action") {
@@ -572,17 +736,25 @@ export default function RadialCommand({
     setActiveSubId(planet.id);
     setStepIdx(0);
     setStepStatus({});
+    setPointPickingField(null);
+    setExpanded(true);
+
     switch (planet.action) {
-      case "select_points":
-        if (onStartPicking) onStartPicking();
+      case "set_origin":
+      case "set_destination":
+        setPointInput("");
+        emitActionToRight(planet, { desc: "Selecciona en mapa o escribe la dirección dentro del orbe" });
         return;
       case "compute":
+        emitActionToRight(planet);
         if (onCompute) onCompute();
         return;
       case "reverse_points":
+        emitActionToRight(planet);
         if (onReversePoints) onReversePoints();
         return;
       case "reset":
+        emitActionToRight(planet);
         if (onResetPoints) onResetPoints();
         return;
       case "cycle_transport": {
@@ -590,35 +762,38 @@ export default function RadialCommand({
         const i = modes.indexOf(transportMode);
         const next = modes[(i + 1) % modes.length];
         if (onTransportChange) onTransportChange(next);
+        emitActionToRight(planet, { value: next, desc: `Modo activo: ${next}` });
         return;
       }
-      case "pick_info":   if (onPickInfo)     onPickInfo(); return;
-      case "search_nearby": if (onSearchNearby) onSearchNearby(planet.value); return;
-      case "locate_me":   if (onLocateMe)     onLocateMe(); return;
+      case "destination_parking":
+      case "fuel_route":
+      case "poi_route":
+      case "avoid_tolls":
+        emitActionToRight(planet);
+        return;
+      case "pick_info":   if (onPickInfo) onPickInfo(); emitActionToRight(planet); return;
+      case "search_nearby": if (onSearchNearby) onSearchNearby(planet.value); emitActionToRight(planet); return;
+      case "locate_me":   if (onLocateMe) onLocateMe(); emitActionToRight(planet); return;
       case "cycle_skin":  setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
       case "minimize":    setMinimized(true); return;
-      case "expert_mode": if (onOpenExpert)   onOpenExpert(); return;
+      case "expert_mode": if (onOpenExpert) onOpenExpert(); return;
       case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
       default:
+        emitActionToRight(planet);
     }
   };
 
-  // ----- central sun content -----------------------------------------------
   const centerContent = useMemo(() => {
     if (inCrosshair) {
-      const step = orbit3Planets[stepIdx];
-      return { title: step?.label?.toUpperCase() || "PICK", subtitle: step?.prompt || "Click en mapa", color: "#fb7185" };
+      const fieldLabel = pointPickingField === "origin" ? "INICIO" : "DESTINO";
+      return { title: `${fieldLabel} MAPA`, subtitle: "Click en el mapa para fijar el punto", color: "#fb7185" };
     }
     if (hoverPlanet) return { title: hoverPlanet.label, subtitle: hoverPlanet.desc, color: "#67e8f9" };
-    if (resultText && mode === "navegador") return { title: "Listo", subtitle: resultText, color: "#4ade80" };
+    if (resultText && mode === "navegador") return { title: "Ruta", subtitle: resultText, color: "#4ade80" };
     const cfg = MODES[mode];
-    return { title: cfg.centerLabel, subtitle: expanded ? cfg.centerHint : "", color: "#22d3ee" };
-  }, [inCrosshair, orbit3Planets, stepIdx, hoverPlanet, resultText, mode, expanded]);
+    return { title: cfg.centerLabel, subtitle: expanded ? cfg.centerHint : "Pasa el ratón para abrir funciones", color: "#22d3ee" };
+  }, [inCrosshair, pointPickingField, hoverPlanet, resultText, mode, expanded]);
 
-  // ----- right-side interaction menu ---------------------------------------
-  // The orb remains visual and spatial; every user action is also exposed as a
-  // precise right-hand menu so the interface is usable even when the user does
-  // not want to chase small hover targets.
   const rightMenuActions = useMemo(() => (
     mode === "main" ? orbit1Planets : orbit2Planets
   ), [mode, orbit1Planets, orbit2Planets]);
@@ -634,15 +809,89 @@ export default function RadialCommand({
 
   const handleSystemAction = useCallback((item) => {
     switch (item.action) {
-      case "locate_me": setBootDone(true); if (onLocateMe) onLocateMe(); return;
+      case "locate_me": if (onLocateMe) onLocateMe(); return;
       case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
-      case "reset": if (onResetPoints) onResetPoints(); setActiveSubId(null); setStepIdx(0); setStepStatus({}); return;
+      case "reset": if (onResetPoints) onResetPoints(); setActiveSubId(null); setStepIdx(0); setStepStatus({}); setPointPickingField(null); return;
       case "cycle_skin": setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
       case "expert_mode": if (onOpenExpert) onOpenExpert(); return;
       case "minimize": setMinimized(true); return;
       default: return;
     }
   }, [onLocateMe, onGeocoderOpen, onResetPoints, onOpenExpert]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.target?.tagName === "INPUT" || e.target?.tagName === "TEXTAREA") return;
+      if (e.key !== "Escape") return;
+      if (!isReady) { setBootStage("auth"); return; }
+      if (pointPickingField) { setPointPickingField(null); return; }
+      if (activeSubId) { setActiveSubId(null); setStepIdx(0); setStepStatus({}); return; }
+      if (mode !== "main") { setMode("main"); setExpanded(true); return; }
+      setExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeSubId, mode, pointPickingField, isReady]);
+
+  const renderBootContent = () => {
+    if (bootStage === "auth") {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center" style={{ pointerEvents: "auto" }}>
+          <div className="font-mono text-[9px] tracking-[0.36em] text-cyan-200/70 uppercase mb-2">Momentum demo access</div>
+          <div className="font-mono text-[22px] tracking-[0.16em] text-cyan-100 uppercase font-bold mb-4">ORBEOS</div>
+          <div className="grid grid-cols-2 gap-2 w-full max-w-[210px]">
+            <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-cyan-100 hover:bg-cyan-300/20">Log in</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-cyan-100 hover:bg-cyan-300/20">Sign up</button>
+          </div>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Visitor"); setBootStage("profile"); }} className="mt-3 w-full max-w-[210px] rounded-full border border-emerald-300/55 bg-emerald-400/15 px-3 py-2.5 font-mono text-[11px] tracking-[0.18em] text-emerald-100 hover:bg-emerald-300/25">VISITOR · DEMO</button>
+          <div className="mt-4 max-w-[210px] font-mono text-[8px] leading-snug text-cyan-200/55">Acceso provisional para probar navegación, capas y acciones contextuales.</div>
+        </div>
+      );
+    }
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center" style={{ pointerEvents: "auto" }}>
+        <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-200/70 uppercase mb-2">Configurar sesión</div>
+        <input
+          value={visitorName}
+          onChange={(e) => setVisitorName(e.target.value)}
+          onPointerDown={(e) => e.stopPropagation()}
+          placeholder="Nombre"
+          className="w-full max-w-[220px] mb-2 rounded-full border border-cyan-300/35 bg-[#020a14]/75 px-3 py-2 text-center font-mono text-[11px] text-cyan-50 outline-none focus:border-cyan-200"
+        />
+        <input
+          value={manualLocation}
+          onChange={(e) => setManualLocation(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submitManualLocation(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          placeholder="Escribe tu localización"
+          className="w-full max-w-[220px] mb-3 rounded-full border border-cyan-300/35 bg-[#020a14]/75 px-3 py-2 text-center font-mono text-[11px] text-cyan-50 outline-none focus:border-cyan-200"
+        />
+        <button type="button" onClick={(e) => { e.stopPropagation(); submitBrowserLocation(); }} className="w-full max-w-[220px] rounded-full border border-emerald-300/55 bg-emerald-400/15 px-3 py-2 font-mono text-[10px] tracking-widest text-emerald-100 hover:bg-emerald-300/25">Aceptar localización</button>
+        <button type="button" onClick={(e) => { e.stopPropagation(); submitManualLocation(); }} className="mt-2 w-full max-w-[220px] rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-cyan-100 hover:bg-cyan-300/20">Usar ubicación escrita</button>
+      </div>
+    );
+  };
+
+  const renderPointInput = () => {
+    if (!activePointField || inCrosshair) return null;
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center" style={{ pointerEvents: "auto" }}>
+        <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-100 uppercase mb-1">{activePointLabel}</div>
+        <input
+          value={pointInput}
+          onChange={(e) => setPointInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submitPointText(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          placeholder="Escribe o pega dirección"
+          className="w-[96px] rounded-full border border-cyan-300/35 bg-[#020a14]/78 px-2 py-1.5 text-center font-mono text-[8px] text-cyan-50 outline-none focus:border-cyan-200"
+        />
+        <div className="mt-1.5 flex gap-1">
+          <button type="button" onClick={(e) => { e.stopPropagation(); startMapPick(activePointField); }} className="rounded-full border border-rose-300/55 bg-rose-400/15 px-1.5 py-1 font-mono text-[7px] tracking-widest text-rose-100 hover:bg-rose-300/25">MAPA</button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); submitPointText(); }} className="rounded-full border border-emerald-300/55 bg-emerald-400/15 px-1.5 py-1 font-mono text-[7px] tracking-widest text-emerald-100 hover:bg-emerald-300/25">USAR</button>
+        </div>
+      </div>
+    );
+  };
 
   /* ====================== RENDER ====================== */
   return (
@@ -653,82 +902,85 @@ export default function RadialCommand({
           position: "fixed",
           left: pos.x, top: pos.y,
           transform: "translate(-50%, -50%)",
-          width: minimized ? 70 : CONTAINER,
-          height: minimized ? 70 : CONTAINER,
+          width: minimized ? 70 : controlSize,
+          height: minimized ? 70 : controlSize,
           zIndex: 60,
           userSelect: "none",
           pointerEvents: "none",
         }}
       >
-        {/* Hover-trigger / drag handle = small disc around the sun */}
         <div
           data-testid="radial-hover-zone"
-          onMouseEnter={() => setExpanded(true)}
+          onPointerEnter={(e) => { if (isReady && e.pointerType === "mouse" && !minimized) setExpanded(true); }}
           onClick={handleHoverZoneClick}
           onPointerDown={onDragStart}
           style={{
             position: "absolute", left: "50%", top: "50%",
             transform: "translate(-50%, -50%)",
-            width: minimized ? 60 : SUN_DIAMETER + 30,
-            height: minimized ? 60 : SUN_DIAMETER + 30,
+            width: minimized ? 60 : activeSunSize + 32,
+            height: minimized ? 60 : activeSunSize + 32,
             borderRadius: "50%",
-            cursor: dragging ? "grabbing" : "grab",
+            cursor: isReady ? (dragging ? "grabbing" : "grab") : "default",
             zIndex: 35,
             pointerEvents: "auto",
           }}
         />
 
-        {/* ====== ORBITS — render in z-order (3 → 2 → 1 so inner sits on top) ====== */}
-        <Orbit
-          planets={orbit3Planets}
-          theme={RING_THEME.orbit3}
-          rotation={orbit3Rotation}
-          revealed={revealOrbit3 && !minimized}
-          accentId={orbit3Planets[stepIdx]?.id}
-          hoverId={hoverPlanet?.id}
-          dimNonAccent={true}
-          onHover={setHoverPlanet}
-          onSelect={() => {}}
-        />
-        <Orbit
-          planets={orbit2Planets}
-          theme={RING_THEME.orbit2}
-          rotation={orbit2Rotation}
-          revealed={revealOrbit2 && !minimized}
-          accentId={activeSubId}
-          hoverId={hoverPlanet?.id}
-          dimNonAccent={false}
-          onHover={setHoverPlanet}
-          onSelect={handleSelect}
-        />
-        <Orbit
-          planets={orbit1Planets}
-          theme={RING_THEME.orbit1}
-          rotation={orbit1Rotation}
-          revealed={revealOrbit1 && !minimized}
-          accentId={MODES[mode]?.activeOrbit1}
-          hoverId={hoverPlanet?.id}
-          dimNonAccent={mode !== "main"}
-          onHover={setHoverPlanet}
-          onSelect={handleSelect}
-        />
+        {isReady && (
+          <>
+            <Orbit
+              planets={orbit3RenderedPlanets}
+              theme={RING_THEME.orbit3}
+              rotation={orbit3Rotation}
+              revealed={revealOrbit3 && !minimized}
+              accentId={orbit3Planets[stepIdx]?.id}
+              hoverId={hoverPlanet?.id}
+              dimNonAccent={true}
+              onHover={setPreviewPlanet}
+              onSelect={handleSelect}
+            />
+            <Orbit
+              planets={orbit2Planets}
+              theme={RING_THEME.orbit2}
+              rotation={orbit2Rotation}
+              revealed={revealOrbit2 && !minimized}
+              accentId={activeSubId}
+              hoverId={hoverPlanet?.id}
+              dimNonAccent={false}
+              onHover={setPreviewPlanet}
+              onSelect={handleSelect}
+            />
+            <Orbit
+              planets={orbit1Planets}
+              theme={RING_THEME.orbit1}
+              rotation={orbit1Rotation}
+              revealed={revealOrbit1 && !minimized}
+              accentId={MODES[mode]?.activeOrbit1}
+              hoverId={hoverPlanet?.id}
+              dimNonAccent={mode !== "main"}
+              onHover={setPreviewPlanet}
+              onSelect={handleSelect}
+            />
+          </>
+        )}
 
-        {/* ====== SUN ====== */}
         <div
           data-testid="radial-core"
           style={{
             position: "absolute",
             left: "50%", top: "50%",
             transform: "translate(-50%, -50%)",
-            width:  minimized ? 50 : SUN_DIAMETER,
-            height: minimized ? 50 : SUN_DIAMETER,
+            width: minimized ? 50 : activeSunSize,
+            height: minimized ? 50 : activeSunSize,
             zIndex: 30,
-            pointerEvents: "none",
+            pointerEvents: isReady && !activePointField ? "none" : "auto",
           }}
         >
           <Sun skin={CORE_SKINS[skinIdx]} halo={!minimized}>
-            {!minimized && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-3 text-center">
+            {!isReady && renderBootContent()}
+            {isReady && !minimized && activePointField && renderPointInput()}
+            {isReady && !minimized && !activePointField && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={centerContent.title + (inCrosshair ? "-x" : "") + skinIdx}
@@ -754,12 +1006,11 @@ export default function RadialCommand({
                 )}
               </div>
             )}
-            {inCrosshair && <CrosshairFx />}
+            {isReady && inCrosshair && <CrosshairFx />}
           </Sun>
         </div>
 
-        {/* mini-toolbar above the sun */}
-        {expanded && !minimized && !inCrosshair && (
+        {isReady && expanded && !minimized && !inCrosshair && (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -777,18 +1028,17 @@ export default function RadialCommand({
           </motion.div>
         )}
 
-        {/* Cancel pick mid-workflow */}
-        {inCrosshair && (
+        {isReady && inCrosshair && (
           <motion.button
             type="button" data-testid="radial-cancel-pick"
-            onClick={(e) => { e.stopPropagation(); setActiveSubId(null); setStepIdx(0); setStepStatus({}); if (onResetPoints) onResetPoints(); }}
+            onClick={(e) => { e.stopPropagation(); setPointPickingField(null); if (onResetPoints) onResetPoints(); }}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="absolute left-1/2 -translate-x-1/2 px-2 py-0.5 bg-rose-500/15 border border-rose-400/60 hover:bg-rose-500/30 font-mono text-[9px] tracking-widest text-rose-200 rounded-full"
             style={{ top: `calc(50% + ${SUN_DIAMETER/2 + 12}px)`, zIndex: 40, pointerEvents: "auto" }}
           ><XIcon className="inline w-2.5 h-2.5 mr-0.5" /> CANCELAR</motion.button>
         )}
 
-        {minimized && (
+        {isReady && minimized && (
           <button type="button" data-testid="radial-maximize"
                   onClick={(e) => { e.stopPropagation(); setMinimized(false); }}
                   className="absolute -right-1 -top-1 p-0.5 bg-cyan-400 text-[#020a14] rounded-full"
@@ -798,20 +1048,26 @@ export default function RadialCommand({
         )}
       </div>
 
-      <SidePanel
-        entries={sideEntries || []}
-        actions={rightMenuActions}
-        systemActions={systemActions}
-        modeLabel={MODES[mode]?.centerLabel || mode}
-        hoverPlanet={hoverPlanet}
-        activeSubId={activeSubId || MODES[mode]?.activeOrbit1}
-        onActionHover={setHoverPlanet}
-        onActionSelect={handleSelect}
-        onSystemAction={handleSystemAction}
-        onEdit={onEntryEdit}
-        onSave={onEntrySave}
-        onDelete={onEntryDelete}
-      />
+      {isReady && (
+        <SidePanel
+          entries={sideEntries || []}
+          actions={rightMenuActions}
+          steps={revealOrbit3 ? orbit3RenderedPlanets : []}
+          stepIdx={stepIdx}
+          stepStatus={stepStatus}
+          systemActions={systemActions}
+          modeLabel={MODES[mode]?.centerLabel || mode}
+          hoverPlanet={hoverPlanet}
+          activeSubId={activeSubId || MODES[mode]?.activeOrbit1}
+          onActionHover={setPreviewPlanet}
+          onActionSelect={handleSelect}
+          onStepSelect={handleSelect}
+          onSystemAction={handleSystemAction}
+          onEdit={onEntryEdit}
+          onSave={onEntrySave}
+          onDelete={onEntryDelete}
+        />
+      )}
     </>
   );
 }
