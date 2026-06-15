@@ -24,13 +24,15 @@ export default function CommandCenter() {
   const mapContainerRef = useRef(null);
   const markersRef = useRef([]);
   const parkingMarkersRef = useRef([]);
+  const operatorMarkerRef = useRef(null);
+  const friendMarkersRef = useRef([]);
   const measurePointsRef = useRef([]);
   const measureMarkersRef = useRef([]);
   const measureLineSourceIdRef = useRef("measure-line");
   const hoverPopupRef = useRef(null);
 
   const [mapStyle, setMapStyle] = useState("light");
-  const [city, setCity] = useState("madrid");
+  const [city, setCity] = useState("barcelona");
   const [cities, setCities] = useState([]);
   const [eventsData, setEventsData] = useState(null);
   const [parkingData, setParkingData] = useState(null);
@@ -43,6 +45,8 @@ export default function CommandCenter() {
   const [measureDistance, setMeasureDistance] = useState(0);
   const [cursorMeasure, setCursorMeasure] = useState(null);
   const [showParking, setShowParking] = useState(false);
+  const [showFood, setShowFood] = useState(false);
+  const [friendRoutes, setFriendRoutes] = useState([]);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showRoutePanel, setShowRoutePanel] = useState(false);
   const [routeFrom, setRouteFrom] = useState("");
@@ -73,6 +77,7 @@ export default function CommandCenter() {
   const [mapCenter, setMapCenter] = useState({ lat: 40.41678, lng: -3.70379 });
   const [lastUpdate, setLastUpdate] = useState(null);
   const [clock, setClock] = useState(new Date());
+  const [userLocationLabel, setUserLocationLabel] = useState("Detectando ubicación…");
 
   // diagnostic stream log
   const [logs, setLogs] = useState([]);
@@ -100,6 +105,63 @@ export default function CommandCenter() {
   }, []);
   const addLog = useCallback((msg, kind = "info") => {
     setLogs((l) => [{ id: Date.now() + Math.random(), msg, kind, t: new Date() }, ...l].slice(0, 24));
+  }, []);
+
+  const inferNearestCityId = useCallback((lat, lon) => {
+    const presets = [
+      { id: "barcelona", lat: 41.3874, lon: 2.1686 },
+      { id: "madrid", lat: 40.4168, lon: -3.7038 },
+      { id: "valencia", lat: 39.4699, lon: -0.3763 },
+      { id: "sevilla", lat: 37.3891, lon: -5.9845 },
+      { id: "bilbao", lat: 43.2630, lon: -2.9350 },
+      { id: "zaragoza", lat: 41.6488, lon: -0.8891 },
+    ];
+    let best = presets[0];
+    let bestScore = Infinity;
+    for (const item of presets) {
+      const score = Math.hypot(item.lat - lat, item.lon - lon);
+      if (score < bestScore) { bestScore = score; best = item; }
+    }
+    return best.id;
+  }, []);
+
+  const renderOperatorMarker = useCallback((coords, name) => {
+    const map = mapRef.current;
+    if (!map || !coords) return;
+    if (operatorMarkerRef.current) operatorMarkerRef.current.remove();
+
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex";
+    wrap.style.flexDirection = "column";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "6px";
+
+    const pin = document.createElement("div");
+    pin.style.width = "48px";
+    pin.style.height = "48px";
+    pin.style.borderRadius = "999px";
+    pin.style.background = "linear-gradient(180deg,#2563eb,#1d4ed8)";
+    pin.style.border = "4px solid white";
+    pin.style.boxShadow = "0 12px 30px rgba(37,99,235,0.35)";
+    pin.style.display = "grid";
+    pin.style.placeItems = "center";
+    pin.style.color = "white";
+    pin.style.fontSize = "26px";
+    pin.innerHTML = "⌖";
+
+    const label = document.createElement("div");
+    label.textContent = name || "Usuario";
+    label.style.padding = "6px 11px";
+    label.style.borderRadius = "999px";
+    label.style.background = "rgba(255,255,255,0.97)";
+    label.style.border = "1px solid rgba(37,99,235,0.22)";
+    label.style.boxShadow = "0 10px 28px rgba(15,23,42,0.14)";
+    label.style.color = "#0f172a";
+    label.style.font = "600 12px system-ui";
+
+    wrap.appendChild(pin);
+    wrap.appendChild(label);
+    operatorMarkerRef.current = new maplibregl.Marker({ element: wrap, anchor: "bottom" }).setLngLat(coords).addTo(map);
   }, []);
 
   // clock
@@ -287,9 +349,9 @@ export default function CommandCenter() {
   useEffect(() => {
     if (mapRef.current || !mapContainerRef.current) return;
     // Restore previous user view if we saved one in localStorage, otherwise
-    // default to a close 3D view of Madrid centro.
-    let initialCenter = [-3.70379, 40.41678];
-    let initialZoom   = 13.4;
+    // default to a close clear view of Barcelona until user geolocation is accepted.
+    let initialCenter = [2.1686, 41.3874];
+    let initialZoom   = 14.4;
     let initialPitch  = 0;
     let initialBearing = 0;
     try {
@@ -381,6 +443,72 @@ export default function CommandCenter() {
     // `mapStyle`, `addLog`, etc. are handled by dedicated effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!mapReady || !radialProfile?.name || !radialOrigin) return;
+    renderOperatorMarker(radialOrigin, radialProfile.name);
+  }, [mapReady, radialProfile, radialOrigin, renderOperatorMarker]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const srcId = "friends-routes";
+    const layerId = "friends-routes-line";
+
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(srcId)) map.removeSource(srcId);
+
+    const data = {
+      type: "FeatureCollection",
+      features: friendRoutes.map((r) => ({
+        type: "Feature",
+        properties: { name: r.name, color: r.color || "#2563eb" },
+        geometry: { type: "LineString", coordinates: r.geometry || [r.origin, r.destination] },
+      })),
+    };
+
+    map.addSource(srcId, { type: "geojson", data });
+    map.addLayer({
+      id: layerId,
+      type: "line",
+      source: srcId,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": ["get", "color"], "line-width": 4, "line-opacity": 0.86 },
+    });
+
+    friendMarkersRef.current.forEach((m) => m.remove());
+    friendMarkersRef.current = [];
+    friendRoutes.forEach((r) => {
+      const wrap = document.createElement("div");
+      wrap.style.display = "flex";
+      wrap.style.flexDirection = "column";
+      wrap.style.alignItems = "center";
+      wrap.style.gap = "4px";
+      const dot = document.createElement("div");
+      dot.style.width = "20px";
+      dot.style.height = "20px";
+      dot.style.borderRadius = "999px";
+      dot.style.background = r.color || "#2563eb";
+      dot.style.border = "3px solid white";
+      dot.style.boxShadow = "0 8px 20px rgba(15,23,42,.20)";
+      const label = document.createElement("div");
+      label.textContent = r.name;
+      label.style.padding = "4px 8px";
+      label.style.borderRadius = "999px";
+      label.style.background = "rgba(255,255,255,.96)";
+      label.style.font = "600 11px system-ui";
+      label.style.color = "#0f172a";
+      label.style.boxShadow = "0 8px 20px rgba(15,23,42,.12)";
+      wrap.appendChild(dot);
+      wrap.appendChild(label);
+      friendMarkersRef.current.push(new maplibregl.Marker({ element: wrap, anchor: "bottom" }).setLngLat(r.origin).addTo(map));
+    });
+
+    return () => {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(srcId)) map.removeSource(srcId);
+    };
+  }, [friendRoutes, mapReady]);
 
   // ---- style change ----
   useEffect(() => {
@@ -600,6 +728,38 @@ export default function CommandCenter() {
   }, [showParking]);
 
   useEffect(() => { renderParkingMarkers(parkingData); }, [parkingData, showParking, renderParkingMarkers]);
+
+  const renderFoodMarkers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const markerKey = "__mrcFoodMarkers";
+    if (!map[markerKey]) map[markerKey] = [];
+    map[markerKey].forEach((m) => m.remove());
+    map[markerKey] = [];
+    if (!showFood) return;
+
+    const c = map.getCenter();
+    const labels = ["Comer", "Café", "Tapas", "Brunch", "Bistro", "Restaurante"];
+    labels.forEach((label, i) => {
+      const angle = (Math.PI * 2 * i) / labels.length;
+      const lat = c.lat + Math.sin(angle) * 0.007;
+      const lon = c.lng + Math.cos(angle) * 0.009;
+      const el = document.createElement("div");
+      el.style.width = "20px";
+      el.style.height = "20px";
+      el.style.borderRadius = "999px";
+      el.style.background = i % 2 ? "#dbeafe" : "#ffffff";
+      el.style.border = "3px solid #2563eb";
+      el.style.boxShadow = "0 8px 22px rgba(37,99,235,.24)";
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([lon, lat])
+        .setPopup(new maplibregl.Popup({ offset: 18 }).setHTML(`<div style="font:600 12px system-ui;color:#0f172a">${label}</div><div style="font:12px system-ui;color:#475569">Punto cercano demo</div>`))
+        .addTo(map);
+      map[markerKey].push(marker);
+    });
+  }, [showFood]);
+
+  useEffect(() => { renderFoodMarkers(); }, [renderFoodMarkers, mapStyle, mapCenter]);
 
   const loadParkingHere = useCallback(async () => {
     const map = mapRef.current;
@@ -1137,8 +1297,27 @@ export default function CommandCenter() {
   const locateMe = () => {
     if (!navigator.geolocation || !mapRef.current) return;
     navigator.geolocation.getCurrentPosition((pos) => {
-      mapRef.current.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16, duration: 1200 });
+      const coords = [pos.coords.longitude, pos.coords.latitude];
+      userTouchedMapRef.current = true;
+      setRadialOrigin(coords);
+      setMapCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setUserLocationLabel(`Tu ubicación · ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+      setCity(inferNearestCityId(pos.coords.latitude, pos.coords.longitude));
+      setShowAzureFlow(true);
+      setShowAzureIncidents(true);
+      mapRef.current.flyTo({ center: coords, zoom: 15.8, duration: 1200 });
+      renderOperatorMarker(coords, radialProfile?.name || "Usuario");
       addLog("[NAV ] Centered on operator position", "ok");
+      pushSideEntry({
+        id: "origin",
+        title: "INICIO",
+        value: radialProfile?.name || "Usuario",
+        meta: `${pos.coords.latitude.toFixed(4)} , ${pos.coords.longitude.toFixed(4)}`,
+        color: "#2563eb",
+      });
+    }, () => {
+      setUserLocationLabel("Ubicación no disponible");
+      addLog("[NAV ] No se pudo leer la ubicación del navegador", "err");
     });
   };
 
@@ -1157,7 +1336,22 @@ export default function CommandCenter() {
     if (useGeolocation && navigator.geolocation && mapRef.current) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const coords = [pos.coords.longitude, pos.coords.latitude];
-        mapRef.current?.flyTo({ center: coords, zoom: 16, duration: 1300 });
+        userTouchedMapRef.current = true;
+        setRadialOrigin(coords);
+        setMapCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setUserLocationLabel(`Tu ubicación · ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        setCity(inferNearestCityId(pos.coords.latitude, pos.coords.longitude));
+        setShowAzureFlow(true);
+        setShowAzureIncidents(true);
+        renderOperatorMarker(coords, name || "Visitor");
+        mapRef.current?.flyTo({ center: coords, zoom: 15.8, duration: 1300 });
+        pushSideEntry({
+          id: "origin",
+          title: "INICIO",
+          value: name || "Visitor",
+          meta: `${pos.coords.latitude.toFixed(4)} , ${pos.coords.longitude.toFixed(4)}`,
+          color: "#2563eb",
+        });
         addLog(`[BOOT] ${name || "Visitor"} centrado con ubicación del navegador`, "ok");
       }, async () => {
         if (locationQuery) await handleSetPointFromText("boot", locationQuery);
@@ -1170,7 +1364,23 @@ export default function CommandCenter() {
       try {
         const r = await geocode(locationQuery);
         if (mapRef.current && r) {
-          mapRef.current.flyTo({ center: [r.lon, r.lat], zoom: 15.6, duration: 1300 });
+          const coords = [r.lon, r.lat];
+          userTouchedMapRef.current = true;
+          setRadialOrigin(coords);
+          setMapCenter({ lat: r.lat, lng: r.lon });
+          setUserLocationLabel(r.display_name || locationQuery);
+          setCity(inferNearestCityId(r.lat, r.lon));
+          setShowAzureFlow(true);
+          setShowAzureIncidents(true);
+          renderOperatorMarker(coords, name || "Visitor");
+          mapRef.current.flyTo({ center: coords, zoom: 15.6, duration: 1300 });
+          pushSideEntry({
+            id: "origin",
+            title: "INICIO",
+            value: name || "Visitor",
+            meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`,
+            color: "#2563eb",
+          });
           addLog(`[BOOT] Vista inicial centrada en ${r.display_name?.slice(0, 45) || locationQuery}`, "ok");
         }
       } catch (e) {
@@ -1193,6 +1403,13 @@ export default function CommandCenter() {
         setRadialDest(coords);
         pushSideEntry({ id: "destination", title: "DESTINO", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#fbbf24" });
       } else if (field === "boot") {
+        userTouchedMapRef.current = true;
+        setRadialOrigin(coords);
+        setMapCenter({ lat: r.lat, lng: r.lon });
+        setUserLocationLabel(r.display_name || query);
+        setCity(inferNearestCityId(r.lat, r.lon));
+        renderOperatorMarker(coords, radialProfile?.name || "Usuario");
+        pushSideEntry({ id: "origin", title: "INICIO", value: radialProfile?.name || "Usuario", meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#2563eb" });
         mapRef.current?.flyTo({ center: coords, zoom: 15.4, duration: 1300 });
       }
       mapRef.current?.flyTo({ center: coords, zoom: 15.4, duration: 1100 });
@@ -1224,7 +1441,72 @@ export default function CommandCenter() {
     if (item.action === "destination_parking") setShowParking(true);
     if (item.action === "poi_route") setShowMobility(true);
     if (item.action === "fuel_route") setShowEVPanel(true);
+    if (String(item.id || "").includes("parking")) setShowParking(true);
+    if (String(item.id || "").includes("bikes")) setShowMobility(true);
+    if (String(item.id || "").includes("ev")) setShowEVPanel(true);
+    if (String(item.id || "").includes("traffic")) { setShowAzureFlow(true); setShowAzureIncidents(true); }
     addLog(`[ORBE] ${item.label || item.id}`, "info");
+  };
+
+  const handleMultiRouteSubmit = async ({ destinationQuery, items = [] }) => {
+    if (!destinationQuery?.trim() || !items.length) {
+      addLog("[MULTI] Falta destino o puntos de inicio", "err");
+      return;
+    }
+    try {
+      addLog(`[MULTI] Preparando ${items.length} rutas hacia ${destinationQuery}`, "info");
+      const dest = await geocode(destinationQuery);
+      if (!dest) throw new Error("Destino no encontrado");
+      const destinationCoords = [dest.lon, dest.lat];
+      setRadialDest(destinationCoords);
+      pushSideEntry({ id: "destination", title: "DESTINO", value: destinationQuery, meta: `${dest.lat.toFixed(4)} , ${dest.lon.toFixed(4)}`, color: "#fbbf24" });
+
+      const palette = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+      const built = [];
+
+      for (let i = 0; i < items.length; i += 1) {
+        const row = items[i];
+        let originObj;
+        if (row.useUserOrigin && radialOrigin) {
+          originObj = { lon: radialOrigin[0], lat: radialOrigin[1] };
+        } else if (row.originQuery?.trim()) {
+          originObj = await geocode(row.originQuery);
+        }
+        if (!originObj) continue;
+
+        const originCoords = [originObj.lon, originObj.lat];
+        let geometry = [originCoords, destinationCoords];
+
+        try {
+          const mm = await fetchMultimodalPlan(originObj.lat, originObj.lon, dest.lat, dest.lon);
+          const best = mm?.options?.[0];
+          const coords = [];
+          best?.segments?.forEach((seg) => { if (seg.from) coords.push(seg.from); if (seg.to) coords.push(seg.to); });
+          if (coords.length >= 2) geometry = coords;
+        } catch (e) {
+          // fallback: direct line
+        }
+
+        built.push({
+          id: `multi-${Date.now()}-${i}`,
+          name: row.name || `Ruta ${i + 1}`,
+          origin: originCoords,
+          destination: destinationCoords,
+          geometry,
+          color: palette[i % palette.length],
+        });
+      }
+
+      setFriendRoutes(built);
+      built.forEach((r) => pushSideEntry({ id: `multi-${r.id}`, title: "MULTI", value: r.name, meta: "Ruta hacia destino común", color: r.color }));
+      addLog(`[MULTI] ${built.length} rutas preparadas`, "ok");
+
+      if (mapRef.current) {
+        mapRef.current.flyTo({ center: destinationCoords, zoom: 12.8, duration: 1200 });
+      }
+    } catch (e) {
+      addLog(`[MULTI] Error: ${e.message}`, "err");
+    }
   };
 
   const kpi = useMemo(() => {
@@ -1631,6 +1913,14 @@ export default function CommandCenter() {
         </div>
       </aside>
 
+      {!expertMode && (
+        <div className="absolute left-4 top-4 z-40 max-w-[520px] rounded-[22px] border border-blue-100 bg-white/90 px-4 py-3 shadow-[0_16px_60px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+          <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-blue-600">Ubicación activa</div>
+          <div className="mt-1 text-[22px] font-semibold leading-tight text-slate-950">{userLocationLabel}</div>
+          <div className="mt-1 text-[12px] text-slate-600">El punto azul marca el inicio del usuario. El orbe trabaja desde ahí.</div>
+        </div>
+      )}
+
       {/* ===== RIGHT PANEL ===== */}
       <aside
         className={`absolute right-3 top-[150px] bottom-[200px] w-[340px] z-40 panel brackets flex-col anim-fade-up ${focusMode ? "hidden" : "hidden lg:flex"}`}
@@ -1744,7 +2034,7 @@ export default function CommandCenter() {
         >
           <div className="mb-1 flex items-center justify-between gap-3 px-1">
             <div className="font-mono text-[9px] tracking-[0.32em] text-slate-600 uppercase">Sistemas conectados</div>
-            <div className="font-mono text-[8px] tracking-[0.22em] text-slate-500 uppercase">Diagnóstico operativo · FULL-LOGIC-20260615 · reintento disponible cuando hay incidencia</div>
+            <div className="font-mono text-[8px] tracking-[0.22em] text-slate-500 uppercase">Diagnóstico operativo · reintento disponible cuando hay incidencia</div>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
             {systemItems.map((item) => {
@@ -1804,7 +2094,13 @@ export default function CommandCenter() {
         onEntryDelete={(e) => {
           if (e.id === "origin")           setRadialOrigin(null);
           else if (e.id === "destination") setRadialDest(null);
-          else if (e.id === "route")       { setRadialMmod(null); setRadialMmodOpen(false); }
+          else if (e.id === "route")       { setRadialMmod(null); setRadialMmodOpen(false); clearRoute(); }
+          else if (String(e.id).includes("parking")) setShowParking(false);
+          else if (String(e.id).includes("food")) setShowFood(false);
+          else if (String(e.id).includes("bikes")) setShowMobility(false);
+          else if (String(e.id).includes("ev")) setShowEVPanel(false);
+          else if (String(e.id).includes("traffic")) { setShowAzureFlow(false); setShowAzureIncidents(false); }
+          else if (String(e.id).startsWith("multi-")) setFriendRoutes((rows) => rows.filter((r) => `multi-${r.id}` !== e.id));
           setSideEntries((arr) => arr.filter((x) => x.id !== e.id));
         }}
         onCompute={async () => {
@@ -1814,8 +2110,11 @@ export default function CommandCenter() {
             const mm = await fetchMultimodalPlan(radialOrigin[1], radialOrigin[0], radialDest[1], radialDest[0]);
             setRadialMmod(mm);
             setRadialMmodOpen(true);
-            addLog(`[RADIAL] ${mm.options?.length || 0} opciones · mejor: ${mm.options?.[0]?.label}`, "ok");
             const best = mm.options?.[0];
+            const coords = [];
+            best?.segments?.forEach((seg) => { if (seg.from) coords.push(seg.from); if (seg.to) coords.push(seg.to); });
+            drawRoute({ type: "LineString", coordinates: coords.length >= 2 ? coords : [radialOrigin, radialDest] });
+            addLog(`[RADIAL] ${mm.options?.length || 0} opciones · mejor: ${best?.label || "ruta directa"}`, "ok");
             if (best) {
               pushSideEntry({
                 id: "route",
@@ -1825,7 +2124,17 @@ export default function CommandCenter() {
                 color: "#22d3ee",
               });
             }
-          } catch (e) { addLog(`[RADIAL] Multimodal falló: ${e.message}`, "err"); }
+          } catch (e) {
+            drawRoute({ type: "LineString", coordinates: [radialOrigin, radialDest] });
+            pushSideEntry({
+              id: "route",
+              title: "RUTA",
+              value: "Ruta directa",
+              meta: "Fallback visual porque el cálculo multimodal falló",
+              color: "#2563eb",
+            });
+            addLog(`[RADIAL] Multimodal falló, dibujada ruta directa: ${e.message}`, "err");
+          }
         }}
         onToggleLayer={(layer, on) => {
           if (layer === "traffic") { setShowAzureFlow(on); setShowAzureIncidents(on); }
@@ -1833,14 +2142,37 @@ export default function CommandCenter() {
           if (layer === "bikes")   setShowMobility(on);
           if (layer === "weather") setShowAzureWeather(on);
           if (layer === "ev")      setShowEVPanel(on);
+          if (layer === "food")    setShowFood(on);
+          pushSideEntry({
+            id: `layer-${layer}`,
+            title: `CAPA · ${String(layer).toUpperCase()}`,
+            value: on ? "Activada" : "Desactivada",
+            meta: "Acción desde el orbe",
+            color: "#2563eb",
+          });
           addLog(`[CAPA] ${layer.toUpperCase()} ${on ? "ON" : "OFF"}`, "info");
         }}
         onPickInfo={() => addLog("[INFO] Función en preparación", "info")}
-        onSearchNearby={(category) => addLog(`[CERCA] Buscando ${category} (mock)`, "info")}
+        onSearchNearby={(category) => {
+          if (category === "parking") { setShowParking(true); loadParkingHere(); }
+          if (category === "bikes")   setShowMobility(true);
+          if (category === "ev")      setShowEVPanel(true);
+          if (category === "food")    setShowFood(true);
+          pushSideEntry({
+            id: `near-${category}`,
+            title: `CERCA · ${String(category).toUpperCase()}`,
+            value: "Activado",
+            meta: "Capa solicitada desde el orbe",
+            color: "#2563eb",
+          });
+          addLog(`[CERCA] Buscando ${category}`, "info");
+        }}
         onLocateMe={() => locateMe()}
         onBootstrapComplete={handleRadialBootstrap}
         onSetPointFromText={handleSetPointFromText}
         onRouteOption={handleRouteOption}
+        onMultiRouteSubmit={handleMultiRouteSubmit}
+        userProfile={radialProfile}
         onOpenExpert={() => setExpertMode(true)}
         onGeocoderOpen={() => setExpertMode(true)}
         resultText={radialOrigin && radialDest
