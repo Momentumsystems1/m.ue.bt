@@ -29,7 +29,7 @@ export default function CommandCenter() {
   const measureLineSourceIdRef = useRef("measure-line");
   const hoverPopupRef = useRef(null);
 
-  const [mapStyle, setMapStyle] = useState("vector3d");
+  const [mapStyle, setMapStyle] = useState("normal");
   const [city, setCity] = useState("madrid");
   const [cities, setCities] = useState([]);
   const [eventsData, setEventsData] = useState(null);
@@ -277,9 +277,9 @@ export default function CommandCenter() {
     // Restore previous user view if we saved one in localStorage, otherwise
     // default to a close 3D view of Madrid centro.
     let initialCenter = [-3.70379, 40.41678];
-    let initialZoom   = 15;
-    let initialPitch  = 55;
-    let initialBearing = -18;
+    let initialZoom   = 11.6;
+    let initialPitch  = 0;
+    let initialBearing = 0;
     try {
       const saved = JSON.parse(localStorage.getItem("mrc:last-view") || "null");
       if (saved && Number.isFinite(saved.lng) && Number.isFinite(saved.lat)) {
@@ -302,7 +302,23 @@ export default function CommandCenter() {
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
-    map.on("load", () => setMapReady(true));
+    map.on("load", () => {
+      setMapReady(true);
+      // Render/SPA first paint can create the map before the container has its final size.
+      // Resize twice to avoid the classic blank MapLibre canvas on first deploy.
+      setTimeout(() => map.resize(), 80);
+      setTimeout(() => map.resize(), 600);
+    });
+
+    map.on("error", (ev) => {
+      const msg = ev?.error?.message || "tile/style error";
+      addLog(`[MAP ] ${msg}`, "err");
+      // The Vector 3D provider can fail or be blocked. Fall back to the robust raster map.
+      if (mapStyle !== "normal") setMapStyle("normal");
+    });
+
+    const handleWindowResize = () => map.resize();
+    window.addEventListener("resize", handleWindowResize);
 
     map.on("pitch", () => setPitch(Math.round(map.getPitch())));
     map.on("zoom", () => setZoom(map.getZoom().toFixed(2)));
@@ -343,7 +359,11 @@ export default function CommandCenter() {
     addLog("[CORE] Map subsystem initialized", "ok");
     addLog("[NET ] Connecting to DGT 3.0 DATEX2 stream...", "info");
 
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      window.removeEventListener("resize", handleWindowResize);
+      map.remove();
+      mapRef.current = null;
+    };
     // Intentional run-once: map should only be initialised once at mount.
     // `mapStyle`, `addLog`, etc. are handled by dedicated effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps

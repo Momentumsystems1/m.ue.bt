@@ -1,669 +1,492 @@
-/**
- * RadialCommand — context-driven planetary control with animated orbital reveal.
- *
- *  See `radialConfig.js` for geometric constants and mode definitions.
- *
- *  Reveal sequence:
- *    1. Idle      → sun only ("Inicio").
- *    2. Hover     → ORBIT 1 grows from a point to its full diameter.
- *    3. Pick mode → ORBIT 2 grows.
- *    4. Pick sub  → ORBIT 3 grows IF the sub-action has `steps`.
- *
- *  Step rotation:
- *    When ORBIT 3 is populated with steps, the orbit rotates so the active
- *    step sits at 12 o'clock. As the user advances, the orbit animates to
- *    the next step (60° rotation per step).
- *
- *  Side info panel (right edge of viewport):
- *    Each completed user action emits an entry that the parent stores. Each
- *    card exposes ✏ edit, 💾 save, ✕ delete actions.
- */
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  AlertTriangle, ParkingCircle, Bike, Zap, CloudRain,
-  Car, Bus, Footprints, CarTaxiFront,
-  MapPin, Flag, Route, Info, RotateCcw, MapPinned,
-  ArrowLeft, ArrowLeftRight, Bookmark, Compass, Search, User, Mic, Clock,
-  Layers, Crosshair, HelpCircle, Wrench, Minimize2, Maximize2, Palette,
-  Megaphone, Share2, Utensils, ShoppingBag, Check, X as XIcon,
-  Pencil, Save, Trash2,
+  AlertTriangle, ArrowLeft, ArrowLeftRight, Bike, Bookmark, Car, CloudRain,
+  Compass, Crosshair, Flag, HelpCircle, Info, Layers, MapPin, MapPinned,
+  Maximize2, Minimize2, Mic, Move, ParkingCircle, Palette, Route, Search,
+  ShoppingBag, Trash2, User, Utensils, Wrench, Zap, RotateCcw,
 } from "lucide-react";
-import {
-  MODES, RING_THEME, CORE_SKINS, SUN_DIAMETER, CONTAINER,
-  planetsFor, rotationForSlot, indexOfPlanet,
-} from "@/lib/radialConfig";
+import { CORE_SKINS, MODES } from "@/lib/radialConfig";
 
 const ICON_MAP = {
-  AlertTriangle, ParkingCircle, Bike, Zap, CloudRain,
-  Car, Bus, Footprints, CarTaxiFront,
-  MapPin, Flag, Route, Info, RotateCcw, MapPinned,
-  ArrowLeft, ArrowLeftRight, Bookmark, Compass, Search, User, Mic, Clock,
-  Layers, Crosshair, HelpCircle, Wrench, Minimize2, Palette,
-  Megaphone, Share2, Utensils, ShoppingBag,
+  AlertTriangle, ArrowLeft, ArrowLeftRight, Bike, Bookmark, Car, CloudRain,
+  Compass, Crosshair, Flag, HelpCircle, Info, Layers, MapPin, MapPinned,
+  Maximize2, Minimize2, Mic, Move, ParkingCircle, Palette, Route, Search,
+  ShoppingBag, Trash2, User, Utensils, Wrench, Zap, RotateCcw,
 };
 
-/* =====================================================================
-   Planet — a small button orbiting a ring at its angular slot.
-   ===================================================================== */
-function Planet({ planet, idx, ringRotation, theme, accent, dim, hidden, onHover, onSelect }) {
-  const Icon = ICON_MAP[planet.icon] || Info;
-  const angleDeg = idx * 60 - 90;
-  const rad = (angleDeg * Math.PI) / 180;
-  const x = Math.cos(rad) * theme.radius;
-  const y = Math.sin(rad) * theme.radius;
+const SIZE = 430;
+const CORE = 118;
+const R1 = 142;
+const R2 = 202;
+const PLANET = 42;
+const cyan = "#22d3ee";
+const amber = "#fbbf24";
+const panel = "rgba(2,10,20,0.88)";
 
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function positionFor(index, total, radius, start = -90) {
+  const angle = ((start + index * (360 / Math.max(total, 1))) * Math.PI) / 180;
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
+}
+
+function RingLine({ radius, color, label }) {
+  return (
+    <div
+      className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
+      style={{
+        width: radius * 2,
+        height: radius * 2,
+        transform: "translate(-50%, -50%)",
+        border: `1px dashed ${color}55`,
+        boxShadow: `0 0 22px ${color}11`,
+      }}
+    >
+      <div
+        className="absolute left-1/2 -top-5 -translate-x-1/2 font-mono text-[8px] tracking-[0.32em] uppercase"
+        style={{ color: `${color}aa` }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function PlanetButton({ item, index, total, radius, color, active, disabled, onHover, onClick }) {
+  const Icon = ICON_MAP[item.icon] || Info;
+  const { x, y } = positionFor(index, total, radius);
   return (
     <motion.button
       type="button"
-      data-testid={`planet-${planet.id}`}
-      onClick={(e) => { e.stopPropagation(); onSelect && onSelect(planet); }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseEnter={() => onHover && onHover(planet)}
-      onMouseLeave={() => onHover && onHover(null)}
-      animate={{
-        opacity: hidden ? 0 : (dim ? 0.32 : 1),
-        scale: accent ? 1.2 : 1,
+      data-testid={`planet-${item.id}`}
+      initial={{ opacity: 0, scale: 0.86 }}
+      animate={{ opacity: disabled ? 0.34 : 1, scale: active ? 1.08 : 1 }}
+      exit={{ opacity: 0, scale: 0.86 }}
+      whileHover={{ scale: 1.1 }}
+      transition={{ duration: 0.16 }}
+      onPointerEnter={() => onHover(item)}
+      onPointerLeave={() => onHover(null)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick(item);
       }}
-      whileHover={{ scale: (accent ? 1.2 : 1) * 1.08 }}
-      transition={{ type: "spring", stiffness: 260, damping: 22 }}
       style={{
         position: "absolute",
         left: `calc(50% + ${x}px)`,
         top: `calc(50% + ${y}px)`,
-        transform: `translate(-50%, -50%) rotate(${-ringRotation}deg)`,
-        width: theme.planet, height: theme.planet,
-        borderRadius: "50%",
-        background: accent ? theme.color : "rgba(2,10,20,0.88)",
-        border: `1.5px solid ${theme.color}`,
-        color: accent ? "#020a14" : theme.color,
-        display: "flex", alignItems: "center", justifyContent: "center",
+        width: PLANET,
+        height: PLANET,
+        transform: "translate(-50%, -50%)",
+        borderRadius: "999px",
+        background: active ? color : panel,
+        border: `1.5px solid ${color}`,
+        color: active ? "#020a14" : color,
+        boxShadow: active ? `0 0 26px ${color}77, inset 0 0 10px #ffffff55` : `0 0 12px ${color}22`,
         cursor: "pointer",
-        backdropFilter: "blur(8px)",
-        pointerEvents: hidden ? "none" : "auto",
-        boxShadow: accent ? `0 0 22px ${theme.glow}, 0 0 44px ${theme.glow}, inset 0 0 8px ${theme.glow}` : "none",
+        pointerEvents: "auto",
       }}
     >
-      <Icon size={theme.planet * 0.46} strokeWidth={accent ? 2.4 : 1.8} />
-      {planet.label && (
-        <div
-          className="absolute -bottom-5 left-1/2 -translate-x-1/2 font-mono text-[8px] tracking-widest pointer-events-none"
-          style={{
-            color: accent ? "#020a14" : `${theme.color}cc`,
-            transform: `translateX(-50%) rotate(${ringRotation}deg)`,
-            whiteSpace: "nowrap",
-            textShadow: accent ? "none" : "0 0 6px rgba(0,0,0,0.7)",
-          }}
-        >
-          {planet.label.toUpperCase()}
-        </div>
-      )}
+      <Icon size={18} strokeWidth={active ? 2.5 : 1.9} />
+      <span
+        className="absolute left-1/2 -bottom-5 -translate-x-1/2 font-mono text-[8px] tracking-widest whitespace-nowrap uppercase pointer-events-none"
+        style={{ color: active ? color : `${color}cc`, textShadow: "0 0 8px #000" }}
+      >
+        {item.label}
+      </span>
     </motion.button>
   );
 }
 
-/* =====================================================================
-   Orbit — animated ring whose dashed line passes EXACTLY through every
-   planet's geometric centre (planets sit on the orbit circumference).
-   The visible dashed circle is therefore a fresh SVG drawn at the
-   correct radius — independent from any container border which would
-   force us into a `box-sizing` rabbit-hole.
-   ===================================================================== */
-function Orbit({ planets, theme, rotation, revealed, accentId, hoverId, dimNonAccent, onHover, onSelect }) {
-  const containerSize = (theme.radius + theme.planet / 2 + 16) * 2;
-  return (
-    <motion.div
-      initial={false}
-      animate={{
-        opacity: revealed ? 1 : 0,
-        scale:   revealed ? 1 : 0.05,
-      }}
-      transition={{ type: "spring", stiffness: 180, damping: 22, mass: 0.7 }}
-      style={{
-        position: "absolute",
-        width:  containerSize,
-        height: containerSize,
-        left: `calc(50% - ${containerSize / 2}px)`,
-        top:  `calc(50% - ${containerSize / 2}px)`,
-        pointerEvents: revealed ? "auto" : "none",
-      }}
-    >
-      {/* Dashed orbit line — drawn as SVG so it passes EXACTLY through the
-          centre of every planet (r = theme.radius). */}
-      <svg
-        width={containerSize}
-        height={containerSize}
-        viewBox={`0 0 ${containerSize} ${containerSize}`}
-        style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
-      >
-        <circle
-          cx={containerSize / 2}
-          cy={containerSize / 2}
-          r={theme.radius}
-          fill="none"
-          stroke={theme.color}
-          strokeOpacity="0.28"
-          strokeWidth="1"
-          strokeDasharray="3 4"
-        />
-      </svg>
-
-      {/* 12 o'clock tick — sits on the dashed line */}
-      <div style={{
-        position: "absolute", left: "50%",
-        top: containerSize / 2 - theme.radius - 7,
-        transform: "translateX(-50%)",
-        width: 3, height: 14,
-        background: theme.color, boxShadow: `0 0 8px ${theme.glow}`, borderRadius: 2,
-      }} />
-      {/* Orbit name above the tick */}
-      <div style={{
-        position: "absolute", left: "50%",
-        top: containerSize / 2 - theme.radius - 22,
-        transform: "translateX(-50%)",
-        fontFamily: "var(--font-mono,monospace)", fontSize: 8,
-        letterSpacing: "0.34em", color: theme.color, opacity: 0.55,
-        pointerEvents: "none",
-      }}>{theme.name}</div>
-
-      <motion.div
-        animate={{ rotate: rotation }}
-        transition={{ type: "spring", stiffness: 160, damping: 26 }}
-        style={{ position: "absolute", inset: 0 }}
-      >
-        {planets.map((p, i) => (
-          <Planet
-            key={p.id + "-" + i}
-            planet={p} idx={i}
-            ringRotation={rotation}
-            theme={theme}
-            accent={p.id === accentId || p.id === hoverId}
-            dim={dimNonAccent && p.id !== accentId && p.id !== hoverId}
-            onHover={onHover}
-            onSelect={onSelect}
-          />
-        ))}
-      </motion.div>
-    </motion.div>
-  );
-}
-
-/* =====================================================================
-   Sun — glass-liquid central circle with thin outline.
-   Content slot accepts any React node (text, crosshair, etc.)
-   ===================================================================== */
-function Sun({ skin, children, halo }) {
-  if (skin === "minimal") {
+function Core({ skin, minimized, title, subtitle, color, onClick }) {
+  if (minimized) {
     return (
-      <div className="absolute inset-0 rounded-full border-[1.5px] border-cyan-300/80 bg-[#020a14]/85 backdrop-blur-2xl flex items-center justify-center pointer-events-none"
-        style={{ boxShadow: `0 0 16px rgba(34,211,238,0.35), inset 0 0 12px rgba(34,211,238,0.18)` }}>
-        {children}
-      </div>
-    );
-  }
-  if (skin === "crystal") {
-    return (
-      <div
-        className="absolute inset-0 backdrop-blur-2xl flex items-center justify-center pointer-events-none"
+      <button
+        type="button"
+        onClick={onClick}
+        className="absolute left-1/2 top-1/2 flex items-center justify-center rounded-full font-mono text-[10px] tracking-widest font-bold"
         style={{
-          background: "linear-gradient(135deg, rgba(30,27,75,0.65) 0%, rgba(2,10,20,0.85) 50%, rgba(131,24,67,0.55) 100%)",
-          clipPath: "polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)",
-          border: "1px solid rgba(192,132,252,0.85)",
-          boxShadow: "0 0 26px rgba(192,132,252,0.45), inset 0 0 22px rgba(34,211,238,0.32)",
+          width: 58,
+          height: 58,
+          transform: "translate(-50%, -50%)",
+          background: "radial-gradient(circle at 30% 20%, rgba(103,232,249,.65), rgba(2,10,20,.92) 60%)",
+          border: "1px solid rgba(103,232,249,.9)",
+          color: cyan,
+          boxShadow: "0 0 24px rgba(34,211,238,.42)",
+          pointerEvents: "auto",
         }}
       >
-        {children}
-      </div>
+        CTRL
+      </button>
     );
   }
-  // GLASS (default) — lighter liquid glass with thin cyan outline
+
+  const crystal = skin === "crystal";
+  const minimal = skin === "minimal";
   return (
-    <div
-      className="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none overflow-hidden"
+    <button
+      type="button"
+      data-testid="radial-core"
+      onClick={onClick}
+      className="absolute left-1/2 top-1/2 flex flex-col items-center justify-center rounded-full text-center px-4 overflow-hidden"
       style={{
-        border: "1.2px solid rgba(165,243,252,0.9)",
-        background:
-          "radial-gradient(circle at 30% 26%, rgba(207,250,254,0.55) 0%, rgba(103,232,249,0.32) 26%, rgba(34,211,238,0.20) 58%, rgba(8,38,57,0.55) 100%)",
-        backdropFilter: "blur(8px) saturate(135%)",
-        WebkitBackdropFilter: "blur(8px) saturate(135%)",
-        boxShadow:
-          "0 0 22px rgba(34,211,238,0.40), inset 0 0 22px rgba(207,250,254,0.22), inset 0 1px 0 rgba(255,255,255,0.55)",
+        width: CORE,
+        height: CORE,
+        transform: "translate(-50%, -50%)",
+        background: minimal
+          ? "rgba(2,10,20,.94)"
+          : crystal
+            ? "linear-gradient(135deg, rgba(30,27,75,.82), rgba(2,10,20,.93) 52%, rgba(14,116,144,.62))"
+            : "radial-gradient(circle at 30% 22%, rgba(207,250,254,.58), rgba(103,232,249,.26) 32%, rgba(2,10,20,.86) 76%)",
+        border: "1.2px solid rgba(165,243,252,.95)",
+        boxShadow: "0 0 30px rgba(34,211,238,.38), inset 0 0 22px rgba(103,232,249,.18)",
+        color,
+        pointerEvents: "auto",
+        cursor: "pointer",
       }}
     >
-      {/* Specular highlight */}
-      <div className="absolute -top-1 left-3 right-3 h-5 rounded-full opacity-75 pointer-events-none"
-           style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.7), transparent)", filter: "blur(3px)" }} />
-      {halo && (
+      <div className="absolute top-2 left-5 right-5 h-4 rounded-full bg-white/25 blur-sm pointer-events-none" />
+      <AnimatePresence mode="wait">
         <motion.div
-          className="absolute inset-2 rounded-full border border-cyan-200/40"
-          animate={{ scale: [1, 1.1, 1], opacity: [0.6, 0.12, 0.6] }}
-          transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-        />
+          key={title + subtitle}
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -5 }}
+          transition={{ duration: 0.16 }}
+          className="font-mono uppercase font-bold leading-tight"
+          style={{
+            color,
+            fontSize: title?.length > 10 ? 11 : 14,
+            letterSpacing: "0.18em",
+            textShadow: `0 0 12px ${color}`,
+          }}
+        >
+          {title}
+        </motion.div>
+      </AnimatePresence>
+      {subtitle && (
+        <div className="font-mono text-[8px] leading-tight mt-1 text-cyan-100/75 max-w-[98px]">
+          {subtitle}
+        </div>
       )}
-      {children}
-    </div>
+    </button>
   );
 }
 
-/* Crosshair overlay used for point-pick mode */
-function CrosshairFx() {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-      <motion.div
-        animate={{ scale: [1, 1.1, 1] }}
-        transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-        className="relative w-full h-full"
-      >
-        <div className="absolute left-1/2 top-0 -translate-x-1/2 w-px h-full bg-rose-400/85 shadow-[0_0_10px_#fb7185]" />
-        <div className="absolute top-1/2 left-0 -translate-y-1/2 h-px w-full bg-rose-400/85 shadow-[0_0_10px_#fb7185]" />
-        <div className="absolute inset-[34%] rounded-full border-2 border-rose-400 shadow-[0_0_14px_rgba(251,113,133,0.55)]" />
-        <div className="absolute inset-[44%] rounded-full bg-rose-400 shadow-[0_0_10px_#fb7185]" />
-      </motion.div>
-    </div>
-  );
-}
-
-/* =====================================================================
-   Side info panel (right edge): list of completed actions w/ ✏ 💾 ✕
-   ===================================================================== */
 function SidePanel({ entries, onEdit, onSave, onDelete }) {
-  if (!entries.length) return null;
+  if (!entries?.length) return null;
   return (
     <div
       data-testid="radial-side-panel"
-      className="fixed right-4 z-40 max-w-[300px] w-[300px] flex flex-col gap-2 pointer-events-none"
-      style={{ top: 80, bottom: 80, overflowY: "auto" }}
+      className="fixed right-4 top-20 bottom-20 z-40 w-[300px] max-w-[300px] overflow-y-auto pointer-events-none"
     >
-      <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300 px-1 pointer-events-none">CONTEXTO · {entries.length}</div>
-      <AnimatePresence>
-        {entries.map((e) => (
-          <motion.div
-            key={e.id}
-            data-testid={`side-card-${e.id}`}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ type: "spring", stiffness: 240, damping: 22 }}
+      <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300 px-1 mb-2">CONTEXTO · {entries.length}</div>
+      <div className="flex flex-col gap-2">
+        {entries.map((entry) => (
+          <div
+            key={entry.id}
             className="panel-solid p-2.5 pointer-events-auto"
-            style={{ borderLeft: `3px solid ${e.color || "#22d3ee"}` }}
+            style={{ borderLeft: `3px solid ${entry.color || cyan}` }}
           >
             <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-[10px] tracking-widest font-bold text-cyan-200 truncate">{e.title}</div>
-                <div className="font-mono text-[9px] text-cyan-300/80 mt-0.5 leading-snug break-words">{e.value}</div>
-                {e.meta && <div className="font-mono text-[8px] text-cyan-500/70 mt-0.5 italic">{e.meta}</div>}
+              <div className="min-w-0">
+                <div className="font-mono text-[10px] tracking-widest text-cyan-100 font-bold truncate">{entry.title}</div>
+                <div className="font-mono text-[9px] text-cyan-300/80 mt-1 break-words leading-snug">{entry.value}</div>
+                {entry.meta && <div className="font-mono text-[8px] text-cyan-500/70 mt-1 italic">{entry.meta}</div>}
               </div>
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                <button type="button" data-testid={`side-edit-${e.id}`}
-                        onClick={() => onEdit && onEdit(e)}
-                        className="p-1 bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/30 text-cyan-200 rounded"
-                        title="Modificar">
-                  <Pencil className="w-2.5 h-2.5" />
-                </button>
-                <button type="button" data-testid={`side-save-${e.id}`}
-                        onClick={() => onSave && onSave(e)}
-                        className="p-1 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/30 text-emerald-300 rounded"
-                        title="Guardar">
-                  <Save className="w-2.5 h-2.5" />
-                </button>
-                <button type="button" data-testid={`side-del-${e.id}`}
-                        onClick={() => onDelete && onDelete(e)}
-                        className="p-1 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/30 text-rose-300 rounded"
-                        title="Eliminar">
-                  <Trash2 className="w-2.5 h-2.5" />
-                </button>
+              <div className="flex gap-1 shrink-0">
+                <button className="px-1.5 py-1 border border-cyan-500/30 text-cyan-200" onClick={() => onEdit?.(entry)}>✎</button>
+                <button className="px-1.5 py-1 border border-emerald-500/30 text-emerald-300" onClick={() => onSave?.(entry)}>✓</button>
+                <button className="px-1.5 py-1 border border-rose-500/30 text-rose-300" onClick={() => onDelete?.(entry)}>×</button>
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }
 
-/* =====================================================================
-   RadialCommand main
-   ===================================================================== */
 export default function RadialCommand({
-  origin, destination,
-  onStartPicking, onResetPoints, onReversePoints,
-  onCompute, onToggleLayer, onPickInfo, onSearchNearby,
-  onLocateMe, onOpenExpert, onGeocoderOpen,
-  transportMode, onTransportChange,
+  origin,
+  destination,
+  onStartPicking,
+  onResetPoints,
+  onReversePoints,
+  onCompute,
+  onToggleLayer,
+  onPickInfo,
+  onSearchNearby,
+  onLocateMe,
+  onOpenExpert,
+  onGeocoderOpen,
+  transportMode,
+  onTransportChange,
   resultText,
-  sideEntries, onEntryEdit, onEntrySave, onEntryDelete,
+  sideEntries,
+  onEntryEdit,
+  onEntrySave,
+  onEntryDelete,
 }) {
-  // ----- drag the whole control around -------------------------------------
   const [pos, setPos] = useState(() => ({
-    x: typeof window !== "undefined" ? window.innerWidth / 2 : 700,
-    y: typeof window !== "undefined" ? window.innerHeight / 2 : 400,
+    x: typeof window !== "undefined" ? window.innerWidth / 2 : 720,
+    y: typeof window !== "undefined" ? Math.max(315, window.innerHeight / 2) : 420,
   }));
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef({ pointerX: 0, pointerY: 0, posX: 0, posY: 0 });
-  const onDragMove = useCallback((e) => {
-    setPos({
-      x: dragRef.current.posX + (e.clientX - dragRef.current.pointerX),
-      y: dragRef.current.posY + (e.clientY - dragRef.current.pointerY),
-    });
-  }, []);
-  const onDragEnd = useCallback(() => {
-    setDragging(false);
-    window.removeEventListener("pointermove", onDragMove);
-    window.removeEventListener("pointerup", onDragEnd);
-  }, [onDragMove]);
-  const onDragStart = (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    setDragging(true);
-    dragRef.current = { pointerX: e.clientX, pointerY: e.clientY, posX: pos.x, posY: pos.y };
-    window.addEventListener("pointermove", onDragMove);
-    window.addEventListener("pointerup", onDragEnd);
-  };
-
-  // ----- expand / minimize / skin ------------------------------------------
+  const [expanded, setExpanded] = useState(true);
   const [minimized, setMinimized] = useState(false);
-  const [skinIdx, setSkinIdx]     = useState(0);
-  const [expanded, setExpanded]   = useState(false);
-  const [hoverPlanet, setHoverPlanet] = useState(null);
+  const [mode, setMode] = useState("main");
+  const [hovered, setHovered] = useState(null);
+  const [skinIdx, setSkinIdx] = useState(0);
+  const [enabledLayers, setEnabledLayers] = useState({});
+  const drag = useRef(null);
 
-  useEffect(() => {
-    if (!expanded || dragging || minimized) return;
-    const onMove = (e) => {
-      const d = Math.hypot(e.clientX - pos.x, e.clientY - pos.y);
-      if (d > 300) setExpanded(false);
+  const mainItems = MODES.main.orbit1;
+  const subItems = mode === "main" ? [] : (MODES[mode]?.orbit2 || []);
+
+  const activeMainId = MODES[mode]?.activeOrbit1;
+  const center = useMemo(() => {
+    if (hovered) return { title: hovered.label, subtitle: hovered.desc, color: amber };
+    if (resultText && mode === "navegador") return { title: "Ruta", subtitle: resultText, color: "#4ade80" };
+    if (!expanded) return { title: "Control", subtitle: "Click para abrir", color: cyan };
+    if (mode === "main") return { title: "Control", subtitle: "Selecciona módulo", color: cyan };
+    return { title: MODES[mode]?.centerLabel || "Control", subtitle: MODES[mode]?.centerHint || "", color: cyan };
+  }, [hovered, resultText, mode, expanded]);
+
+  const beginDrag = useCallback((e) => {
+    e.preventDefault();
+    drag.current = { startX: e.clientX, startY: e.clientY, x: pos.x, y: pos.y };
+    const onMove = (ev) => {
+      if (!drag.current) return;
+      const nextX = drag.current.x + ev.clientX - drag.current.startX;
+      const nextY = drag.current.y + ev.clientY - drag.current.startY;
+      setPos({
+        x: clamp(nextX, 90, window.innerWidth - 90),
+        y: clamp(nextY, 105, window.innerHeight - 90),
+      });
+    };
+    const onUp = () => {
+      drag.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
     };
     window.addEventListener("pointermove", onMove);
-    return () => window.removeEventListener("pointermove", onMove);
-  }, [expanded, dragging, minimized, pos.x, pos.y]);
+    window.addEventListener("pointerup", onUp);
+  }, [pos.x, pos.y]);
 
-  // ----- mode + sub-action + steps state -----------------------------------
-  const [mode, setMode]           = useState("main");           // which screen
-  const [activeSubId, setActiveSubId] = useState(null);         // orbit2 planet currently active (e.g. "select_points")
-  const [stepIdx, setStepIdx]     = useState(0);                // index in active sub-action's steps array
-  const [stepStatus, setStepStatus] = useState({});             // { stepId: true } when completed
-  const [bootDone, setBootDone]   = useState(false);            // user has consumed the "Centrar mi posición" prompt
-
-  // Hovering the hover-zone in main mode → invite the user to click for locate.
-  // Clicking the zone (not a planet) in main mode runs the default action.
-  const handleHoverZoneClick = (e) => {
-    e.stopPropagation();
-    if (minimized) { setMinimized(false); return; }
-    if (!bootDone && mode === "main" && !expanded) {
-      // First click — fulfil the default question "Centrar mi posición"
-      setBootDone(true);
-      if (onLocateMe) onLocateMe();
-      return;
-    }
-    setExpanded(v => !v);
+  const cycleTransport = () => {
+    const modes = ["car", "transit", "bike", "foot", "scooter", "taxi"];
+    const i = modes.indexOf(transportMode);
+    onTransportChange?.(modes[(i + 1) % modes.length]);
   };
 
-  const orbit1Planets = useMemo(() => planetsFor(mode, "orbit1"), [mode]);
-  const orbit2Planets = useMemo(() => planetsFor(mode, "orbit2"), [mode]);
-  const orbit2Active  = useMemo(() => activeSubId ? orbit2Planets.find(p => p.id === activeSubId) : null, [orbit2Planets, activeSubId]);
-  const orbit3Planets = useMemo(() => orbit2Active?.steps || [], [orbit2Active]);
-
-  // ----- rotations ----------------------------------------------------------
-  // orbit1 → align macro mode at 12 o'clock when not in main
-  const orbit1Rotation = useMemo(() => {
-    const cfg = MODES[mode];
-    if (!cfg?.activeOrbit1) return 0;
-    const idx = indexOfPlanet(orbit1Planets, cfg.activeOrbit1);
-    return idx >= 0 ? rotationForSlot(idx) : 0;
-  }, [mode, orbit1Planets]);
-  // orbit2 → align the active sub-action planet
-  const orbit2Rotation = useMemo(() => {
-    if (!activeSubId) return 0;
-    const idx = indexOfPlanet(orbit2Planets, activeSubId);
-    return idx >= 0 ? rotationForSlot(idx) : 0;
-  }, [activeSubId, orbit2Planets]);
-  // orbit3 → align the current step at 12 o'clock
-  const orbit3Rotation = useMemo(() => rotationForSlot(stepIdx), [stepIdx]);
-
-  // ----- reveal state -------------------------------------------------------
-  const revealOrbit1 = expanded && !minimized;
-  const revealOrbit2 = revealOrbit1 && mode !== "main";
-  const revealOrbit3 = revealOrbit2 && orbit3Planets.length > 0;
-
-  // ----- crosshair UI ON when orbit3 has steps & the workflow is "select_points"
-  const inCrosshair = revealOrbit3 && activeSubId === "select_points" && stepIdx < orbit3Planets.length;
-
-  // ----- when the parent fills origin/destination, advance the step -------
-  useEffect(() => {
-    if (!inCrosshair) return;
-    const step = orbit3Planets[stepIdx];
-    if (!step) return;
-    const value = step.field === "origin" ? origin : destination;
-    if (!value) return;
-    setStepStatus(s => ({ ...s, [step.id]: true }));
-    const nextIdx = stepIdx + 1;
-    setStepIdx(nextIdx);
-    // When all steps complete, collapse orbit 3 — keep activeSubId so the
-    // orbit-2 selection (e.g. Puntos) stays highlighted in the next session.
-    if (nextIdx >= orbit3Planets.length) {
-      // small delay so the user sees the last step turn green before fade
-      setTimeout(() => setStepIdx(0), 600);
-    }
-  // intentional: react to fresh origin/destination only
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [origin, destination]);
-
-  // ----- planet click dispatcher -------------------------------------------
-  const handleSelect = (planet) => {
-    if (planet.type === "mode" && planet.targetMode) {
-      setMode(planet.targetMode);
-      setActiveSubId(null);
-      setStepIdx(0);
-      setStepStatus({});
-      return;
-    }
-    if (planet.type === "toggle") {
-      if (onToggleLayer) onToggleLayer(planet.value, true);
-      return;
-    }
-    if (planet.type === "action") {
-      runAction(planet);
-      return;
-    }
-  };
-
-  const runAction = (planet) => {
-    setActiveSubId(planet.id);
-    setStepIdx(0);
-    setStepStatus({});
-    switch (planet.action) {
+  const runAction = (item) => {
+    switch (item.action) {
       case "select_points":
-        if (onStartPicking) onStartPicking();
+        onStartPicking?.();
         return;
       case "compute":
-        if (onCompute) onCompute();
+        onCompute?.();
         return;
       case "reverse_points":
-        if (onReversePoints) onReversePoints();
+        onReversePoints?.();
         return;
       case "reset":
-        if (onResetPoints) onResetPoints();
+        onResetPoints?.();
         return;
-      case "cycle_transport": {
-        const modes = ["car", "transit", "bike", "foot", "scooter", "taxi"];
-        const i = modes.indexOf(transportMode);
-        const next = modes[(i + 1) % modes.length];
-        if (onTransportChange) onTransportChange(next);
+      case "cycle_transport":
+        cycleTransport();
         return;
-      }
-      case "pick_info":   if (onPickInfo)     onPickInfo(); return;
-      case "search_nearby": if (onSearchNearby) onSearchNearby(planet.value); return;
-      case "locate_me":   if (onLocateMe)     onLocateMe(); return;
-      case "cycle_skin":  setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
-      case "minimize":    setMinimized(true); return;
-      case "expert_mode": if (onOpenExpert)   onOpenExpert(); return;
-      case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
+      case "pick_info":
+        onPickInfo?.();
+        return;
+      case "search_nearby":
+        onSearchNearby?.(item.value);
+        return;
+      case "locate_me":
+        onLocateMe?.();
+        return;
+      case "cycle_skin":
+        setSkinIdx((i) => (i + 1) % CORE_SKINS.length);
+        return;
+      case "minimize":
+        setMinimized(true);
+        return;
+      case "expert_mode":
+        onOpenExpert?.();
+        return;
+      case "open_geocoder":
+        onGeocoderOpen?.();
+        return;
       default:
+        return;
     }
   };
 
-  // ----- central sun content -----------------------------------------------
-  const centerContent = useMemo(() => {
-    if (inCrosshair) {
-      const step = orbit3Planets[stepIdx];
-      return { title: step?.label?.toUpperCase() || "PICK", subtitle: step?.prompt || "Click en mapa", color: "#fb7185" };
+  const selectItem = (item) => {
+    if (item.type === "mode") {
+      setMode(item.targetMode || "main");
+      setExpanded(true);
+      return;
     }
-    if (hoverPlanet) return { title: hoverPlanet.label, subtitle: hoverPlanet.desc, color: "#67e8f9" };
-    if (resultText && mode === "navegador") return { title: "Listo", subtitle: resultText, color: "#4ade80" };
-    const cfg = MODES[mode];
-    return { title: cfg.centerLabel, subtitle: expanded ? cfg.centerHint : "", color: "#22d3ee" };
-  }, [inCrosshair, orbit3Planets, stepIdx, hoverPlanet, resultText, mode, expanded]);
+    if (item.type === "toggle") {
+      const next = !enabledLayers[item.value];
+      setEnabledLayers((s) => ({ ...s, [item.value]: next }));
+      onToggleLayer?.(item.value, next);
+      return;
+    }
+    runAction(item);
+  };
 
-  /* ====================== RENDER ====================== */
   return (
     <>
       <div
         data-testid="radial-command"
         style={{
           position: "fixed",
-          left: pos.x, top: pos.y,
+          left: pos.x,
+          top: pos.y,
+          width: minimized ? 86 : SIZE,
+          height: minimized ? 86 : SIZE,
           transform: "translate(-50%, -50%)",
-          width: minimized ? 70 : CONTAINER,
-          height: minimized ? 70 : CONTAINER,
           zIndex: 60,
-          userSelect: "none",
           pointerEvents: "none",
+          userSelect: "none",
         }}
       >
-        {/* Hover-trigger / drag handle = small disc around the sun */}
-        <div
-          data-testid="radial-hover-zone"
-          onMouseEnter={() => setExpanded(true)}
-          onClick={handleHoverZoneClick}
-          onPointerDown={onDragStart}
-          style={{
-            position: "absolute", left: "50%", top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: minimized ? 60 : SUN_DIAMETER + 30,
-            height: minimized ? 60 : SUN_DIAMETER + 30,
-            borderRadius: "50%",
-            cursor: dragging ? "grabbing" : "grab",
-            zIndex: 35,
-            pointerEvents: "auto",
-          }}
-        />
-
-        {/* ====== ORBITS — render in z-order (3 → 2 → 1 so inner sits on top) ====== */}
-        <Orbit
-          planets={orbit3Planets}
-          theme={RING_THEME.orbit3}
-          rotation={orbit3Rotation}
-          revealed={revealOrbit3 && !minimized}
-          accentId={orbit3Planets[stepIdx]?.id}
-          hoverId={hoverPlanet?.id}
-          dimNonAccent={true}
-          onHover={setHoverPlanet}
-          onSelect={() => {}}
-        />
-        <Orbit
-          planets={orbit2Planets}
-          theme={RING_THEME.orbit2}
-          rotation={orbit2Rotation}
-          revealed={revealOrbit2 && !minimized}
-          accentId={activeSubId}
-          hoverId={hoverPlanet?.id}
-          dimNonAccent={false}
-          onHover={setHoverPlanet}
-          onSelect={handleSelect}
-        />
-        <Orbit
-          planets={orbit1Planets}
-          theme={RING_THEME.orbit1}
-          rotation={orbit1Rotation}
-          revealed={revealOrbit1 && !minimized}
-          accentId={MODES[mode]?.activeOrbit1}
-          hoverId={hoverPlanet?.id}
-          dimNonAccent={mode !== "main"}
-          onHover={setHoverPlanet}
-          onSelect={handleSelect}
-        />
-
-        {/* ====== SUN ====== */}
-        <div
-          data-testid="radial-core"
-          style={{
-            position: "absolute",
-            left: "50%", top: "50%",
-            transform: "translate(-50%, -50%)",
-            width:  minimized ? 50 : SUN_DIAMETER,
-            height: minimized ? 50 : SUN_DIAMETER,
-            zIndex: 30,
-            pointerEvents: "none",
-          }}
-        >
-          <Sun skin={CORE_SKINS[skinIdx]} halo={!minimized}>
-            {!minimized && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-3 text-center">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={centerContent.title + (inCrosshair ? "-x" : "") + skinIdx}
-                    initial={{ opacity: 0, y: 4, scale: 0.9 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                    transition={{ duration: 0.22 }}
-                    className="font-mono uppercase font-bold leading-tight"
-                    style={{
-                      color: centerContent.color,
-                      fontSize: (centerContent.title?.length || 0) > 9 ? "11px" : "14px",
-                      letterSpacing: "0.18em",
-                      textShadow: `0 0 10px ${centerContent.color}`,
-                    }}
-                  >
-                    {centerContent.title}
-                  </motion.div>
-                </AnimatePresence>
-                {centerContent.subtitle && (
-                  <div className="font-mono text-[8px] text-cyan-200/70 mt-1 leading-tight max-w-[100px]">
-                    {centerContent.subtitle}
-                  </div>
-                )}
-              </div>
-            )}
-            {inCrosshair && <CrosshairFx />}
-          </Sun>
-        </div>
-
-        {/* mini-toolbar above the sun */}
-        {expanded && !minimized && !inCrosshair && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="absolute left-1/2 -translate-x-1/2 flex gap-1.5"
-            style={{ top: `calc(50% - ${SUN_DIAMETER/2 + 18}px)`, transform: "translateX(-50%)", zIndex: 40, pointerEvents: "auto" }}
+        {!minimized && (
+          <button
+            type="button"
+            onPointerDown={beginDrag}
+            className="absolute left-1/2 top-4 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-full border font-mono text-[8px] tracking-[0.22em] uppercase"
+            style={{
+              color: "#67e8f9",
+              borderColor: "rgba(34,211,238,.35)",
+              background: "rgba(2,10,20,.82)",
+              cursor: "grab",
+              pointerEvents: "auto",
+              zIndex: 80,
+            }}
+            title="Mover control"
           >
-            <button type="button" data-testid="radial-skin-toggle"
-                    onClick={(e) => { e.stopPropagation(); setSkinIdx(i => (i + 1) % CORE_SKINS.length); }}
-                    className="p-1 bg-[#020a14]/90 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 rounded-full"
-                    title="Cambiar aspecto"><Palette size={10} /></button>
-            <button type="button" data-testid="radial-minimize"
-                    onClick={(e) => { e.stopPropagation(); setMinimized(true); }}
-                    className="p-1 bg-[#020a14]/90 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 rounded-full"
-                    title="Minimizar"><Minimize2 size={10} /></button>
-          </motion.div>
-        )}
-
-        {/* Cancel pick mid-workflow */}
-        {inCrosshair && (
-          <motion.button
-            type="button" data-testid="radial-cancel-pick"
-            onClick={(e) => { e.stopPropagation(); setActiveSubId(null); setStepIdx(0); setStepStatus({}); if (onResetPoints) onResetPoints(); }}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="absolute left-1/2 -translate-x-1/2 px-2 py-0.5 bg-rose-500/15 border border-rose-400/60 hover:bg-rose-500/30 font-mono text-[9px] tracking-widest text-rose-200 rounded-full"
-            style={{ top: `calc(50% + ${SUN_DIAMETER/2 + 12}px)`, zIndex: 40, pointerEvents: "auto" }}
-          ><XIcon className="inline w-2.5 h-2.5 mr-0.5" /> CANCELAR</motion.button>
-        )}
-
-        {minimized && (
-          <button type="button" data-testid="radial-maximize"
-                  onClick={(e) => { e.stopPropagation(); setMinimized(false); }}
-                  className="absolute -right-1 -top-1 p-0.5 bg-cyan-400 text-[#020a14] rounded-full"
-                  style={{ pointerEvents: "auto" }}>
-            <Maximize2 size={9} />
+            <Move size={10} /> mover
           </button>
+        )}
+
+        <AnimatePresence>
+          {expanded && !minimized && (
+            <motion.div
+              key="radial-rings"
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.94 }}
+              transition={{ duration: 0.18 }}
+              className="absolute inset-0"
+            >
+              <RingLine radius={R1} color={cyan} label="Menú" />
+              {mode !== "main" && <RingLine radius={R2} color={amber} label="Acción" />}
+
+              {mainItems.map((item, i) => (
+                <PlanetButton
+                  key={item.id}
+                  item={item}
+                  index={i}
+                  total={mainItems.length}
+                  radius={R1}
+                  color={cyan}
+                  active={item.id === activeMainId}
+                  disabled={mode !== "main" && item.id !== activeMainId}
+                  onHover={setHovered}
+                  onClick={selectItem}
+                />
+              ))}
+
+              {subItems.map((item, i) => {
+                const active = item.type === "toggle" ? !!enabledLayers[item.value] : false;
+                return (
+                  <PlanetButton
+                    key={item.id}
+                    item={item}
+                    index={i}
+                    total={subItems.length}
+                    radius={R2}
+                    color={amber}
+                    active={active}
+                    disabled={false}
+                    onHover={setHovered}
+                    onClick={selectItem}
+                  />
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <Core
+          skin={CORE_SKINS[skinIdx]}
+          minimized={minimized}
+          title={center.title}
+          subtitle={center.subtitle}
+          color={center.color}
+          onClick={() => {
+            if (minimized) {
+              setMinimized(false);
+              setExpanded(true);
+              return;
+            }
+            setExpanded((v) => !v);
+          }}
+        />
+
+        {!minimized && (
+          <div
+            className="absolute left-1/2 flex gap-1.5"
+            style={{
+              top: `calc(50% + ${CORE / 2 + 18}px)`,
+              transform: "translateX(-50%)",
+              pointerEvents: "auto",
+              zIndex: 80,
+            }}
+          >
+            {mode !== "main" && (
+              <button
+                type="button"
+                onClick={() => { setMode("main"); setHovered(null); }}
+                className="px-2 py-1 rounded-full border border-cyan-500/35 bg-[#020a14]/85 font-mono text-[8px] tracking-widest text-cyan-300 uppercase"
+              >
+                volver
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSkinIdx((i) => (i + 1) % CORE_SKINS.length)}
+              className="p-1.5 rounded-full border border-cyan-500/35 bg-[#020a14]/85 text-cyan-300"
+              title="Cambiar aspecto"
+            >
+              <Palette size={11} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="p-1.5 rounded-full border border-cyan-500/35 bg-[#020a14]/85 text-cyan-300"
+              title="Minimizar"
+            >
+              <Minimize2 size={11} />
+            </button>
+          </div>
+        )}
+
+        {(origin || destination) && !minimized && (
+          <div
+            className="absolute left-1/2 bottom-4 -translate-x-1/2 font-mono text-[8px] tracking-widest uppercase text-cyan-200/80 whitespace-nowrap"
+            style={{ pointerEvents: "none" }}
+          >
+            {origin ? "ORG ✓" : "ORG —"} · {destination ? "DST ✓" : "DST —"}
+          </div>
         )}
       </div>
 
