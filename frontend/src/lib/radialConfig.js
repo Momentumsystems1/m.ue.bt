@@ -172,7 +172,10 @@ export function planetsFor(mode, orbit) {
   return raw || [];
 }
 
-export function rotationForSlot(idx) { return -idx * 60; }
+export function rotationForSlot(idx, total = 6) {
+  if (idx < 0 || total <= 1) return 0;
+  return -idx * (360 / total);
+}
 
 export function indexOfPlanet(planets, id) { return planets.findIndex((p) => p.id === id); }
 

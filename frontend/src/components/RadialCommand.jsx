@@ -46,77 +46,100 @@ const ICON_MAP = {
 /* =====================================================================
    Planet — a small button orbiting a ring at its angular slot.
    ===================================================================== */
-function Planet({ planet, idx, ringRotation, theme, accent, dim, hidden, onHover, onSelect }) {
+function Planet({ planet, idx, total, ringRotation, theme, accent, dim, hidden, onHover, onSelect }) {
   const Icon = ICON_MAP[planet.icon] || Info;
-  const angleDeg = idx * 60 - 90;
+  const safeTotal = Math.max(total || 1, 1);
+  const angleDeg = safeTotal === 1 ? -90 : (idx * (360 / safeTotal) - 90);
   const rad = (angleDeg * Math.PI) / 180;
   const x = Math.cos(rad) * theme.radius;
   const y = Math.sin(rad) * theme.radius;
 
   return (
-    <motion.button
-      type="button"
-      data-testid={`planet-${planet.id}`}
-      onClick={(e) => { e.stopPropagation(); onSelect && onSelect(planet); }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseEnter={() => onHover && onHover(planet)}
-      onMouseLeave={() => onHover && onHover(null)}
-      animate={{
-        opacity: hidden ? 0 : (dim ? 0.32 : 1),
-        scale: accent ? 1.2 : 1,
-      }}
-      whileHover={{ scale: (accent ? 1.2 : 1) * 1.08 }}
-      transition={{ type: "spring", stiffness: 260, damping: 22 }}
+    <div
+      data-testid={`planet-wrapper-${planet.id}`}
       style={{
         position: "absolute",
         left: `calc(50% + ${x}px)`,
         top: `calc(50% + ${y}px)`,
+        width: theme.planet,
+        height: theme.planet,
         transform: `translate(-50%, -50%) rotate(${-ringRotation}deg)`,
-        width: theme.planet, height: theme.planet,
-        borderRadius: "50%",
-        background: accent ? theme.color : "rgba(2,10,20,0.88)",
-        border: `1.5px solid ${theme.color}`,
-        color: accent ? "#020a14" : theme.color,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer",
-        backdropFilter: "blur(8px)",
+        transformOrigin: "50% 50%",
         pointerEvents: hidden ? "none" : "auto",
-        boxShadow: accent ? `0 0 22px ${theme.glow}, 0 0 44px ${theme.glow}, inset 0 0 8px ${theme.glow}` : "none",
+        zIndex: accent ? 8 : 4,
       }}
     >
-      <Icon size={theme.planet * 0.46} strokeWidth={accent ? 2.4 : 1.8} />
+      <motion.button
+        type="button"
+        data-testid={`planet-${planet.id}`}
+        aria-label={planet.label || planet.id}
+        title={planet.desc || planet.label || planet.id}
+        onClick={(e) => { e.stopPropagation(); onSelect && onSelect(planet); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerEnter={() => onHover && onHover(planet)}
+        onPointerLeave={() => onHover && onHover(null)}
+        onFocus={() => onHover && onHover(planet)}
+        onBlur={() => onHover && onHover(null)}
+        animate={{
+          opacity: hidden ? 0 : (dim ? 0.34 : 1),
+          scale: accent ? 1.18 : 1,
+        }}
+        whileHover={{ scale: (accent ? 1.18 : 1) * 1.08 }}
+        whileTap={{ scale: 0.94 }}
+        transition={{ type: "spring", stiffness: 280, damping: 22 }}
+        style={{
+          width: theme.planet,
+          height: theme.planet,
+          borderRadius: "50%",
+          background: accent ? theme.color : "rgba(2,10,20,0.9)",
+          border: `1.5px solid ${theme.color}`,
+          color: accent ? "#020a14" : theme.color,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          boxShadow: accent
+            ? `0 0 22px ${theme.glow}, 0 0 44px ${theme.glow}, inset 0 0 8px ${theme.glow}`
+            : `0 0 9px rgba(0,0,0,0.32), inset 0 0 8px rgba(255,255,255,0.04)`,
+        }}
+      >
+        <Icon size={theme.planet * 0.46} strokeWidth={accent ? 2.4 : 1.8} />
+      </motion.button>
       {planet.label && (
         <div
           className="absolute -bottom-5 left-1/2 -translate-x-1/2 font-mono text-[8px] tracking-widest pointer-events-none"
           style={{
-            color: accent ? "#020a14" : `${theme.color}cc`,
-            transform: `translateX(-50%) rotate(${ringRotation}deg)`,
+            color: accent ? theme.color : `${theme.color}cc`,
             whiteSpace: "nowrap",
-            textShadow: accent ? "none" : "0 0 6px rgba(0,0,0,0.7)",
+            textShadow: "0 0 7px rgba(0,0,0,0.9)",
+            maxWidth: 78,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
           {planet.label.toUpperCase()}
         </div>
       )}
-    </motion.button>
+    </div>
   );
 }
 
 /* =====================================================================
-   Orbit — animated ring whose dashed line passes EXACTLY through every
-   planet's geometric centre (planets sit on the orbit circumference).
-   The visible dashed circle is therefore a fresh SVG drawn at the
-   correct radius — independent from any container border which would
-   force us into a `box-sizing` rabbit-hole.
+   Orbit — mathematically exact dynamic distribution.
+   Every planet centre lies on the SVG circle itself: radius = theme.radius.
+   The angular step is 360 / numberOfPlanets, so 2 buttons are diametral,
+   3 form a perfect triangle, 4 a cross, 5/6 stay equally distributed.
    ===================================================================== */
 function Orbit({ planets, theme, rotation, revealed, accentId, hoverId, dimNonAccent, onHover, onSelect }) {
-  const containerSize = (theme.radius + theme.planet / 2 + 16) * 2;
+  const labelPad = 38;
+  const containerSize = Math.ceil((theme.radius + theme.planet / 2 + labelPad) * 2);
+  const total = Math.max(planets.length, 1);
   return (
     <motion.div
       initial={false}
       animate={{
         opacity: revealed ? 1 : 0,
-        scale:   revealed ? 1 : 0.05,
+        scale:   revealed ? 1 : 0.08,
       }}
       transition={{ type: "spring", stiffness: 180, damping: 22, mass: 0.7 }}
       style={{
@@ -128,8 +151,6 @@ function Orbit({ planets, theme, rotation, revealed, accentId, hoverId, dimNonAc
         pointerEvents: revealed ? "auto" : "none",
       }}
     >
-      {/* Dashed orbit line — drawn as SVG so it passes EXACTLY through the
-          centre of every planet (r = theme.radius). */}
       <svg
         width={containerSize}
         height={containerSize}
@@ -142,13 +163,15 @@ function Orbit({ planets, theme, rotation, revealed, accentId, hoverId, dimNonAc
           r={theme.radius}
           fill="none"
           stroke={theme.color}
-          strokeOpacity="0.28"
+          strokeOpacity="0.32"
           strokeWidth="1"
           strokeDasharray="3 4"
         />
+        {/* thin mathematical guide: exact axis cross through the orbit centre */}
+        <line x1={containerSize/2 - 4} y1={containerSize/2} x2={containerSize/2 + 4} y2={containerSize/2} stroke={theme.color} strokeOpacity="0.28" />
+        <line x1={containerSize/2} y1={containerSize/2 - 4} x2={containerSize/2} y2={containerSize/2 + 4} stroke={theme.color} strokeOpacity="0.28" />
       </svg>
 
-      {/* 12 o'clock tick — sits on the dashed line */}
       <div style={{
         position: "absolute", left: "50%",
         top: containerSize / 2 - theme.radius - 7,
@@ -156,25 +179,24 @@ function Orbit({ planets, theme, rotation, revealed, accentId, hoverId, dimNonAc
         width: 3, height: 14,
         background: theme.color, boxShadow: `0 0 8px ${theme.glow}`, borderRadius: 2,
       }} />
-      {/* Orbit name above the tick */}
       <div style={{
         position: "absolute", left: "50%",
-        top: containerSize / 2 - theme.radius - 22,
+        top: containerSize / 2 - theme.radius - 24,
         transform: "translateX(-50%)",
         fontFamily: "var(--font-mono,monospace)", fontSize: 8,
-        letterSpacing: "0.34em", color: theme.color, opacity: 0.55,
+        letterSpacing: "0.34em", color: theme.color, opacity: 0.58,
         pointerEvents: "none",
       }}>{theme.name}</div>
 
       <motion.div
         animate={{ rotate: rotation }}
         transition={{ type: "spring", stiffness: 160, damping: 26 }}
-        style={{ position: "absolute", inset: 0 }}
+        style={{ position: "absolute", inset: 0, transformOrigin: "50% 50%" }}
       >
         {planets.map((p, i) => (
           <Planet
             key={p.id + "-" + i}
-            planet={p} idx={i}
+            planet={p} idx={i} total={total}
             ringRotation={rotation}
             theme={theme}
             accent={p.id === accentId || p.id === hoverId}
@@ -266,17 +288,97 @@ function CrosshairFx() {
 /* =====================================================================
    Side info panel (right edge): list of completed actions w/ ✏ 💾 ✕
    ===================================================================== */
-function SidePanel({ entries, onEdit, onSave, onDelete }) {
-  if (!entries.length) return null;
+function SidePanel({
+  entries, actions, systemActions, modeLabel, hoverPlanet, activeSubId,
+  onActionHover, onActionSelect, onSystemAction,
+  onEdit, onSave, onDelete,
+}) {
+  const visibleActions = actions || [];
   return (
     <div
       data-testid="radial-side-panel"
-      className="fixed right-4 z-40 max-w-[300px] w-[300px] flex flex-col gap-2 pointer-events-none"
+      className="fixed right-4 z-40 max-w-[320px] w-[320px] flex flex-col gap-2 pointer-events-auto"
       style={{ top: 80, bottom: 80, overflowY: "auto" }}
     >
-      <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300 px-1 pointer-events-none">CONTEXTO · {entries.length}</div>
+      <div className="panel-solid p-3" style={{ borderLeft: "3px solid #22d3ee" }}>
+        <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300/90">MENÚ DE INTERACCIÓN</div>
+        <div className="mt-1 font-mono text-[11px] tracking-widest text-cyan-100 uppercase">{modeLabel}</div>
+        {hoverPlanet?.desc && (
+          <div className="mt-1 font-mono text-[9px] text-cyan-300/75 leading-snug">{hoverPlanet.desc}</div>
+        )}
+      </div>
+
+      {!!visibleActions.length && (
+        <div className="panel-solid p-2.5">
+          <div className="font-mono text-[8px] tracking-[0.28em] text-amber-300/80 mb-2">ACCIONES DISPONIBLES</div>
+          <div className="grid grid-cols-1 gap-1.5">
+            {visibleActions.map((a) => {
+              const Icon = ICON_MAP[a.icon] || Info;
+              const active = a.id === activeSubId || a.id === hoverPlanet?.id;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  data-testid={`right-action-${a.id}`}
+                  onPointerEnter={() => onActionHover && onActionHover(a)}
+                  onPointerLeave={() => onActionHover && onActionHover(null)}
+                  onClick={(e) => { e.stopPropagation(); onActionSelect && onActionSelect(a); }}
+                  className="group w-full flex items-center gap-2 rounded-xl px-2 py-2 border text-left transition-all"
+                  style={{
+                    borderColor: active ? "rgba(251,191,36,0.85)" : "rgba(34,211,238,0.20)",
+                    background: active ? "rgba(251,191,36,0.13)" : "rgba(2,10,20,0.72)",
+                    boxShadow: active ? "0 0 16px rgba(251,191,36,0.18)" : "none",
+                  }}
+                >
+                  <span
+                    className="flex items-center justify-center rounded-full shrink-0"
+                    style={{
+                      width: 28, height: 28,
+                      border: `1px solid ${active ? "#fbbf24" : "rgba(34,211,238,0.45)"}`,
+                      color: active ? "#fbbf24" : "#67e8f9",
+                      background: "rgba(0,0,0,0.28)",
+                    }}
+                  >
+                    <Icon size={14} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[10px] tracking-widest text-cyan-100 uppercase truncate">{a.label}</span>
+                    <span className="block font-mono text-[8px] text-cyan-300/65 leading-snug truncate">{a.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!!systemActions?.length && (
+        <div className="panel-solid p-2.5">
+          <div className="font-mono text-[8px] tracking-[0.28em] text-cyan-300/80 mb-2">OPERACIÓN RÁPIDA</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {systemActions.map((a) => {
+              const Icon = ICON_MAP[a.icon] || Info;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  data-testid={`right-system-${a.id}`}
+                  onClick={(e) => { e.stopPropagation(); onSystemAction && onSystemAction(a); }}
+                  className="flex items-center justify-center gap-1.5 rounded-full px-2 py-1.5 bg-cyan-500/10 border border-cyan-500/25 hover:bg-cyan-500/20 hover:border-cyan-300/60 font-mono text-[8px] tracking-widest text-cyan-100 uppercase"
+                >
+                  <Icon size={11} /> {a.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!!entries.length && (
+        <div className="font-mono text-[9px] tracking-[0.32em] text-cyan-300 px-1 pointer-events-none">HISTORIAL · {entries.length}</div>
+      )}
       <AnimatePresence>
-        {entries.map((e) => (
+        {(entries || []).map((e) => (
           <motion.div
             key={e.id}
             data-testid={`side-card-${e.id}`}
@@ -408,16 +510,16 @@ export default function RadialCommand({
     const cfg = MODES[mode];
     if (!cfg?.activeOrbit1) return 0;
     const idx = indexOfPlanet(orbit1Planets, cfg.activeOrbit1);
-    return idx >= 0 ? rotationForSlot(idx) : 0;
+    return idx >= 0 ? rotationForSlot(idx, orbit1Planets.length) : 0;
   }, [mode, orbit1Planets]);
   // orbit2 → align the active sub-action planet
   const orbit2Rotation = useMemo(() => {
     if (!activeSubId) return 0;
     const idx = indexOfPlanet(orbit2Planets, activeSubId);
-    return idx >= 0 ? rotationForSlot(idx) : 0;
+    return idx >= 0 ? rotationForSlot(idx, orbit2Planets.length) : 0;
   }, [activeSubId, orbit2Planets]);
   // orbit3 → align the current step at 12 o'clock
-  const orbit3Rotation = useMemo(() => rotationForSlot(stepIdx), [stepIdx]);
+  const orbit3Rotation = useMemo(() => rotationForSlot(stepIdx, orbit3Planets.length), [stepIdx, orbit3Planets.length]);
 
   // ----- reveal state -------------------------------------------------------
   const revealOrbit1 = expanded && !minimized;
@@ -512,6 +614,35 @@ export default function RadialCommand({
     const cfg = MODES[mode];
     return { title: cfg.centerLabel, subtitle: expanded ? cfg.centerHint : "", color: "#22d3ee" };
   }, [inCrosshair, orbit3Planets, stepIdx, hoverPlanet, resultText, mode, expanded]);
+
+  // ----- right-side interaction menu ---------------------------------------
+  // The orb remains visual and spatial; every user action is also exposed as a
+  // precise right-hand menu so the interface is usable even when the user does
+  // not want to chase small hover targets.
+  const rightMenuActions = useMemo(() => (
+    mode === "main" ? orbit1Planets : orbit2Planets
+  ), [mode, orbit1Planets, orbit2Planets]);
+
+  const systemActions = useMemo(() => ([
+    { id: "locate",   icon: "Crosshair", label: "Centrar",  action: "locate_me" },
+    { id: "search",   icon: "Search",    label: "Buscar",   action: "open_geocoder" },
+    { id: "reset",    icon: "RotateCcw", label: "Limpiar",  action: "reset" },
+    { id: "skin",     icon: "Palette",   label: "Aspecto",  action: "cycle_skin" },
+    { id: "expert",   icon: "Wrench",    label: "Experto",  action: "expert_mode" },
+    { id: "minimize", icon: "Minimize2", label: "Minim.",   action: "minimize" },
+  ]), []);
+
+  const handleSystemAction = useCallback((item) => {
+    switch (item.action) {
+      case "locate_me": setBootDone(true); if (onLocateMe) onLocateMe(); return;
+      case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
+      case "reset": if (onResetPoints) onResetPoints(); setActiveSubId(null); setStepIdx(0); setStepStatus({}); return;
+      case "cycle_skin": setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
+      case "expert_mode": if (onOpenExpert) onOpenExpert(); return;
+      case "minimize": setMinimized(true); return;
+      default: return;
+    }
+  }, [onLocateMe, onGeocoderOpen, onResetPoints, onOpenExpert]);
 
   /* ====================== RENDER ====================== */
   return (
@@ -667,7 +798,20 @@ export default function RadialCommand({
         )}
       </div>
 
-      <SidePanel entries={sideEntries || []} onEdit={onEntryEdit} onSave={onEntrySave} onDelete={onEntryDelete} />
+      <SidePanel
+        entries={sideEntries || []}
+        actions={rightMenuActions}
+        systemActions={systemActions}
+        modeLabel={MODES[mode]?.centerLabel || mode}
+        hoverPlanet={hoverPlanet}
+        activeSubId={activeSubId || MODES[mode]?.activeOrbit1}
+        onActionHover={setHoverPlanet}
+        onActionSelect={handleSelect}
+        onSystemAction={handleSystemAction}
+        onEdit={onEntryEdit}
+        onSave={onEntrySave}
+        onDelete={onEntryDelete}
+      />
     </>
   );
 }
