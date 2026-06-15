@@ -3,10 +3,38 @@ import axios from "axios";
 const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
 export const API = `${BACKEND_URL}/api`;
 
-export const api = axios.create({ baseURL: API, timeout: 30000 });
+export const api = axios.create({
+  baseURL: API,
+  timeout: 30000,
+  headers: { "Content-Type": "application/json" },
+});
+
+// Global error interceptor — log but don't crash the UI
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const url = err?.config?.url || "";
+    const status = err?.response?.status;
+    const msg = err?.response?.data?.detail || err?.message || "Network error";
+    console.warn(`[API] ${status || "ERR"} ${url} — ${msg}`);
+    return Promise.reject(err);
+  }
+);
+
+// Simple retry wrapper for critical calls
+async function withRetry(fn, retries = 2, delayMs = 800) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i === retries) throw e;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+}
 
 export const fetchEvents = (city, lat, lon, radius_km = 150) =>
-  api.get("/events", { params: { city, lat, lon, radius_km } }).then((r) => r.data);
+  withRetry(() => api.get("/events", { params: { city, lat, lon, radius_km } }).then((r) => r.data));
 
 export const fetchParking = (lat, lon, radius = 1500) =>
   api.get("/parking", { params: { lat, lon, radius } }).then((r) => r.data);
@@ -18,7 +46,7 @@ export const fetchHealth = () => api.get("/health").then((r) => r.data);
 export const geocode = (q) => api.get("/geocode", { params: { q } }).then((r) => r.data);
 
 export const fetchRoute = (from_q, to_q, mode = "car") =>
-  api.get("/route", { params: { from: from_q, to: to_q, mode } }).then((r) => r.data);
+  withRetry(() => api.get("/route", { params: { from: from_q, to: to_q, mode } }).then((r) => r.data));
 
 // ----- Azure Maps proxy endpoints -----
 export const azureStatus = () => api.get("/azure/status").then((r) => r.data);
@@ -68,6 +96,8 @@ export const fetchUberStatus = () => api.get("/uber/status").then((r) => r.data)
 
 // ----- Multimodal trip planner -----
 export const fetchMultimodalPlan = (from_lat, from_lon, to_lat, to_lon) =>
-  api.get("/multimodal/plan", {
-    params: { from_lat, from_lon, to_lat, to_lon },
-  }).then((r) => r.data);
+  withRetry(() =>
+    api.get("/multimodal/plan", {
+      params: { from_lat, from_lon, to_lat, to_lon },
+    }).then((r) => r.data)
+  );
