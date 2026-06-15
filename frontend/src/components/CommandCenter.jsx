@@ -1744,7 +1744,7 @@ export default function CommandCenter() {
         >
           <div className="mb-1 flex items-center justify-between gap-3 px-1">
             <div className="font-mono text-[9px] tracking-[0.32em] text-slate-600 uppercase">Sistemas conectados</div>
-            <div className="font-mono text-[8px] tracking-[0.22em] text-slate-500 uppercase">Diagnóstico operativo · reintento disponible cuando hay incidencia</div>
+            <div className="font-mono text-[8px] tracking-[0.22em] text-slate-500 uppercase">Diagnóstico operativo · FULL-LOGIC-20260615 · reintento disponible cuando hay incidencia</div>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
             {systemItems.map((item) => {

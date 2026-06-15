@@ -80,3 +80,15 @@ cd frontend
 npm install --legacy-peer-deps
 npm run build
 ```
+
+
+## Versión completa integrada - 2026-06-15
+
+Esta entrega completa incorpora:
+- Flujo lógico del orbe: Log in / Sign up / Visitor Demo, nombre y localización.
+- Orbe con geometría orbital matemática y estética crystal liquid.
+- Mapa claro con zoom más cercano y fallbacks de render.
+- Panel inferior de sistemas conectados con Retry.
+- Dependencias frontend ajustadas: date-fns 3.6.0, ajv 8.12.0 y ajv-keywords 5.1.0.
+
+Para subir a GitHub, sube el contenido de este ZIP completo desde la raíz, sustituyendo las carpetas existentes `backend`, `frontend`, `memory` y los archivos raíz.
