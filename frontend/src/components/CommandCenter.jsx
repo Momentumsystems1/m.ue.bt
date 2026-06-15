@@ -35,6 +35,7 @@ export default function CommandCenter() {
   const [eventsData, setEventsData] = useState(null);
   const [parkingData, setParkingData] = useState(null);
   const [healthData, setHealthData] = useState(null);
+  const [systemRetrying, setSystemRetrying] = useState(null);
   const [loading, setLoading] = useState(true);
   const [parkingLoading, setParkingLoading] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -288,7 +289,7 @@ export default function CommandCenter() {
     // Restore previous user view if we saved one in localStorage, otherwise
     // default to a close 3D view of Madrid centro.
     let initialCenter = [-3.70379, 40.41678];
-    let initialZoom   = 11.6;
+    let initialZoom   = 13.4;
     let initialPitch  = 0;
     let initialBearing = 0;
     try {
@@ -319,13 +320,14 @@ export default function CommandCenter() {
       // Resize twice to avoid the classic blank MapLibre canvas on first deploy.
       setTimeout(() => map.resize(), 80);
       setTimeout(() => map.resize(), 600);
+      setTimeout(() => map.resize(), 1400);
     });
 
     map.on("error", (ev) => {
       const msg = ev?.error?.message || "tile/style error";
       addLog(`[MAP ] ${msg}`, "err");
       // The Vector 3D provider can fail or be blocked. Fall back to the robust raster map.
-      if (mapStyle !== "normal") setMapStyle("normal");
+      if (mapStyle !== "light") setMapStyle("light");
     });
 
     const handleWindowResize = () => map.resize();
@@ -446,7 +448,7 @@ export default function CommandCenter() {
       // Only recenter when the caller explicitly asks (initial load or city change)
       // and the user hasn't manually moved the map yet.
       if (opts.recenter && mapRef.current && data.center && !userTouchedMapRef.current) {
-        mapRef.current.easeTo({ center: [data.center.lon, data.center.lat], zoom: 11.5, duration: 1000 });
+        mapRef.current.easeTo({ center: [data.center.lon, data.center.lat], zoom: 12.8, duration: 1000 });
       }
     } catch (e) {
       addLog(`[ERR ] Failed to fetch events: ${e.message}`, "err");
@@ -1126,7 +1128,7 @@ export default function CommandCenter() {
     try {
       const r = await geocode(searchQuery);
       if (mapRef.current && r) {
-        mapRef.current.flyTo({ center: [r.lon, r.lat], zoom: 14, duration: 1200 });
+        mapRef.current.flyTo({ center: [r.lon, r.lat], zoom: 15.4, duration: 1200 });
         addLog(`[NAV ] Locked on ${r.display_name.slice(0, 40)}`, "ok");
       }
     } catch (e) { addLog(`[ERR ] Geocode miss: ${e.message}`, "err"); }
@@ -1135,7 +1137,7 @@ export default function CommandCenter() {
   const locateMe = () => {
     if (!navigator.geolocation || !mapRef.current) return;
     navigator.geolocation.getCurrentPosition((pos) => {
-      mapRef.current.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 15, duration: 1200 });
+      mapRef.current.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16, duration: 1200 });
       addLog("[NAV ] Centered on operator position", "ok");
     });
   };
@@ -1155,7 +1157,7 @@ export default function CommandCenter() {
     if (useGeolocation && navigator.geolocation && mapRef.current) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const coords = [pos.coords.longitude, pos.coords.latitude];
-        mapRef.current?.flyTo({ center: coords, zoom: 15, duration: 1300 });
+        mapRef.current?.flyTo({ center: coords, zoom: 16, duration: 1300 });
         addLog(`[BOOT] ${name || "Visitor"} centrado con ubicación del navegador`, "ok");
       }, async () => {
         if (locationQuery) await handleSetPointFromText("boot", locationQuery);
@@ -1168,7 +1170,7 @@ export default function CommandCenter() {
       try {
         const r = await geocode(locationQuery);
         if (mapRef.current && r) {
-          mapRef.current.flyTo({ center: [r.lon, r.lat], zoom: 14, duration: 1300 });
+          mapRef.current.flyTo({ center: [r.lon, r.lat], zoom: 15.6, duration: 1300 });
           addLog(`[BOOT] Vista inicial centrada en ${r.display_name?.slice(0, 45) || locationQuery}`, "ok");
         }
       } catch (e) {
@@ -1191,9 +1193,9 @@ export default function CommandCenter() {
         setRadialDest(coords);
         pushSideEntry({ id: "destination", title: "DESTINO", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#fbbf24" });
       } else if (field === "boot") {
-        mapRef.current?.flyTo({ center: coords, zoom: 14, duration: 1300 });
+        mapRef.current?.flyTo({ center: coords, zoom: 15.4, duration: 1300 });
       }
-      mapRef.current?.flyTo({ center: coords, zoom: 14, duration: 1100 });
+      mapRef.current?.flyTo({ center: coords, zoom: 15.4, duration: 1100 });
       addLog(`[RADIAL] ${field.toUpperCase()} localizado`, "ok");
     } catch (e) {
       addLog(`[RADIAL] Geocode falló: ${e.message}`, "err");
@@ -1242,6 +1244,43 @@ export default function CommandCenter() {
     eventsData.features.forEach((f) => { c[f.kind] = (c[f.kind] || 0) + 1; });
     return Object.entries(c).sort((a, b) => b[1] - a[1]);
   }, [eventsData]);
+
+  const retrySystem = useCallback(async (systemId) => {
+    setSystemRetrying(systemId);
+    addLog(`[NET ] Reintentando sistema ${systemId.toUpperCase()}...`, "info");
+    try {
+      if (systemId === "geolocation") locateMe();
+      const h = await fetchHealth();
+      setHealthData(h);
+      addLog(`[NET ] Reintento completado: ${systemId.toUpperCase()}`, "ok");
+    } catch (e) {
+      addLog(`[NET ] Reintento fallido ${systemId.toUpperCase()}: ${e.message}`, "err");
+    } finally {
+      setTimeout(() => setSystemRetrying(null), 450);
+    }
+  }, [addLog]);
+
+  const systemItems = useMemo(() => {
+    const src = healthData?.sources || {};
+    const statusOf = (value, fallback = "WARN") => value || fallback;
+    return [
+      { id: "backend", label: "Backend API", status: healthData?.service === "online" ? "OK" : "DOWN", detail: healthData?.timestamp ? "FastAPI activo" : "Sin diagnóstico" },
+      { id: "map", label: "Mapa", status: mapReady ? "OK" : "WARN", detail: mapReady ? STYLES[mapStyle]?.label || "Mapa" : "Esperando canvas" },
+      { id: "geolocation", label: "Geolocalización", status: typeof navigator !== "undefined" && navigator.geolocation ? "OK" : "DOWN", detail: "Navegador" },
+      { id: "geocoding", label: "Geocoding", status: statusOf(src.OSM, "OK"), detail: "Nominatim / fallback" },
+      { id: "routing", label: "Routing", status: "OK", detail: "OSRM / fallback local" },
+      { id: "dgt", label: "DGT 3.0", status: statusOf(src["DGT 3.0"]), detail: "DATEX2" },
+      { id: "sct", label: "SCT", status: statusOf(src.SCT), detail: "Catalunya" },
+      { id: "madrid", label: "Madrid", status: statusOf(src.Madrid), detail: "Open data" },
+    ];
+  }, [healthData, mapReady, mapStyle]);
+
+  const statusTone = (status) => {
+    const st = String(status || "WARN").toUpperCase();
+    if (st === "OK" || st === "ONLINE") return { dot: "#22c55e", text: "#166534", bg: "rgba(240,253,244,0.92)", border: "rgba(34,197,94,0.35)", label: "Connected" };
+    if (st === "DOWN" || st === "ERROR" || st === "FAIL") return { dot: "#ef4444", text: "#991b1b", bg: "rgba(254,242,242,0.94)", border: "rgba(239,68,68,0.35)", label: "Problem" };
+    return { dot: "#f59e0b", text: "#92400e", bg: "rgba(255,251,235,0.94)", border: "rgba(245,158,11,0.35)", label: "Warning" };
+  };
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#020a14]" data-testid="command-center">
@@ -1696,6 +1735,52 @@ export default function CommandCenter() {
         </div>
       </footer>
       </>)}
+
+      {/* ===== CONNECTED SYSTEMS · radial mode diagnostic strip ===== */}
+      {!expertMode && (
+        <div
+          className="absolute left-4 right-4 bottom-4 z-50 rounded-[22px] border border-white/55 bg-white/78 px-3 py-2 shadow-[0_18px_65px_rgba(15,23,42,0.22)] backdrop-blur-2xl"
+          data-testid="system-status-dock"
+        >
+          <div className="mb-1 flex items-center justify-between gap-3 px-1">
+            <div className="font-mono text-[9px] tracking-[0.32em] text-slate-600 uppercase">Sistemas conectados</div>
+            <div className="font-mono text-[8px] tracking-[0.22em] text-slate-500 uppercase">Diagnóstico operativo · reintento disponible cuando hay incidencia</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+            {systemItems.map((item) => {
+              const tone = statusTone(item.status);
+              const problem = tone.label !== "Connected";
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border px-2 py-2"
+                  style={{ background: tone.bg, borderColor: tone.border }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: tone.dot, boxShadow: `0 0 10px ${tone.dot}` }} />
+                      <span className="truncate font-mono text-[9px] font-bold tracking-widest uppercase" style={{ color: tone.text }}>{item.label}</span>
+                    </div>
+                    <span className="font-mono text-[8px] uppercase" style={{ color: tone.text }}>{tone.label}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-[8px] text-slate-500">{item.detail}</span>
+                    {problem && (
+                      <button
+                        type="button"
+                        onClick={() => retrySystem(item.id)}
+                        className="shrink-0 rounded-full border border-slate-300 bg-white/80 px-2 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-700 hover:bg-white"
+                      >
+                        {systemRetrying === item.id ? "..." : "Retry"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ===== RADIAL COMMAND · primary UI (always rendered) ===== */}
       <RadialCommand

@@ -251,35 +251,38 @@ function Sun({ skin, children, halo }) {
       </div>
     );
   }
-  // GLASS (default) — lighter liquid glass with thin cyan outline
+  // GLASS (default) — Apple-like crystal liquid glass.
+  // Luminous, transparent and layered over the map.
   return (
     <div
       className="absolute inset-0 rounded-full flex items-center justify-center overflow-hidden"
       style={{
-        border: "1.2px solid rgba(165,243,252,0.9)",
+        border: "1px solid rgba(255,255,255,0.62)",
         background:
-          "radial-gradient(circle at 30% 26%, rgba(207,250,254,0.55) 0%, rgba(103,232,249,0.32) 26%, rgba(34,211,238,0.20) 58%, rgba(8,38,57,0.55) 100%)",
-        backdropFilter: "blur(8px) saturate(135%)",
-        WebkitBackdropFilter: "blur(8px) saturate(135%)",
+          "radial-gradient(circle at 26% 18%, rgba(255,255,255,0.92) 0%, rgba(225,252,255,0.66) 15%, rgba(125,236,255,0.34) 33%, rgba(22,130,166,0.22) 58%, rgba(2,18,30,0.52) 100%)",
+        backdropFilter: "blur(22px) saturate(185%) contrast(108%)",
+        WebkitBackdropFilter: "blur(22px) saturate(185%) contrast(108%)",
         boxShadow:
-          "0 0 22px rgba(34,211,238,0.40), inset 0 0 22px rgba(207,250,254,0.22), inset 0 1px 0 rgba(255,255,255,0.55)",
+          "0 22px 80px rgba(15,23,42,0.32), 0 0 42px rgba(34,211,238,0.38), inset 0 1px 1px rgba(255,255,255,0.92), inset 0 -18px 34px rgba(8,145,178,0.20), inset 0 0 34px rgba(255,255,255,0.20)",
       }}
     >
-      {/* Specular highlight */}
-      <div className="absolute -top-1 left-3 right-3 h-5 rounded-full opacity-75"
-           style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.7), transparent)", filter: "blur(3px)" }} />
+      <div className="absolute left-[16%] right-[16%] top-[8%] h-[24%] rounded-full opacity-90"
+           style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.16) 58%, transparent)", filter: "blur(4px)" }} />
+      <div className="absolute -left-[10%] top-[28%] h-[42%] w-[30%] rounded-full opacity-45"
+           style={{ background: "radial-gradient(circle, rgba(255,255,255,0.72), transparent 68%)", filter: "blur(10px)" }} />
+      <div className="absolute inset-x-[18%] bottom-[9%] h-[14%] rounded-full opacity-55"
+           style={{ background: "radial-gradient(ellipse, rgba(34,211,238,0.36), transparent 70%)", filter: "blur(6px)" }} />
       {halo && (
         <motion.div
-          className="absolute inset-2 rounded-full border border-cyan-200/40"
-          animate={{ scale: [1, 1.1, 1], opacity: [0.6, 0.12, 0.6] }}
-          transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-2 rounded-full border border-white/45"
+          animate={{ scale: [1, 1.06, 1], opacity: [0.52, 0.18, 0.52] }}
+          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
       {children}
     </div>
   );
 }
-
 /* Crosshair overlay used for point-pick mode */
 function CrosshairFx() {
   return (
@@ -840,10 +843,10 @@ export default function RadialCommand({
           <div className="font-mono text-[9px] tracking-[0.36em] text-cyan-200/70 uppercase mb-2">Momentum demo access</div>
           <div className="font-mono text-[22px] tracking-[0.16em] text-cyan-100 uppercase font-bold mb-4">ORBEOS</div>
           <div className="grid grid-cols-2 gap-2 w-full max-w-[210px]">
-            <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-cyan-100 hover:bg-cyan-300/20">Log in</button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-cyan-100 hover:bg-cyan-300/20">Sign up</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-slate-950 hover:bg-cyan-200/55">Log in</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-cyan-300/45 bg-cyan-400/10 px-3 py-2 font-mono text-[10px] tracking-widest text-slate-950 hover:bg-cyan-200/55">Sign up</button>
           </div>
-          <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Visitor"); setBootStage("profile"); }} className="mt-3 w-full max-w-[210px] rounded-full border border-emerald-300/55 bg-emerald-400/15 px-3 py-2.5 font-mono text-[11px] tracking-[0.18em] text-emerald-100 hover:bg-emerald-300/25">VISITOR · DEMO</button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setVisitorName("Visitor"); setBootStage("profile"); }} className="mt-3 w-full max-w-[210px] rounded-full border border-emerald-300/55 bg-emerald-400/15 px-3 py-2.5 font-mono text-[11px] tracking-[0.18em] text-slate-950 hover:bg-emerald-200/55">VISITOR · DEMO</button>
           <div className="mt-4 max-w-[210px] font-mono text-[8px] leading-snug text-cyan-200/55">Acceso provisional para probar navegación, capas y acciones contextuales.</div>
         </div>
       );
@@ -921,8 +924,8 @@ export default function RadialCommand({
             height: minimized ? 60 : activeSunSize + 32,
             borderRadius: "50%",
             cursor: isReady ? (dragging ? "grabbing" : "grab") : "default",
-            zIndex: 35,
-            pointerEvents: "auto",
+            zIndex: isReady ? 35 : 12,
+            pointerEvents: isReady ? "auto" : "none",
           }}
         />
 

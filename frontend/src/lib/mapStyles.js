@@ -31,7 +31,7 @@ export const STYLE_NORMAL = {
 
 export const STYLE_LIGHT = {
   version: 8,
-  name: "MRC Light Clear",
+  name: "MRC Apple Clear",
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {
     "carto-light": {
@@ -47,8 +47,8 @@ export const STYLE_LIGHT = {
     },
   },
   layers: [
-    { id: "bg", type: "background", paint: { "background-color": "#f4f7f9" } },
-    { id: "carto-light", type: "raster", source: "carto-light", paint: { "raster-saturation": -0.08, "raster-contrast": 0.08 } },
+    { id: "bg", type: "background", paint: { "background-color": "#f7f9fb" } },
+    { id: "carto-light", type: "raster", source: "carto-light", paint: { "raster-saturation": 0.02, "raster-contrast": 0.16, "raster-brightness-min": 0.02, "raster-brightness-max": 0.98 } },
   ],
 };
 
