@@ -629,11 +629,12 @@ export default function RadialCommand({
   const orbit2Planets = useMemo(() => planetsFor(mode, "orbit2"), [mode]);
   const orbit2Active  = useMemo(() => activeSubId ? orbit2Planets.find(p => p.id === activeSubId) : null, [orbit2Planets, activeSubId]);
 
-  // Annotate toggle planets with their on/off state so they glow when active
+  const computeReady = !!(origin && destination);
+
   const orbit2PlanetsAnnotated = useMemo(() =>
     orbit2Planets.map((p) => {
       if (p.type === "toggle") return { ...p, done: !!stepStatus[`toggle-${p.value}`] };
-      if (p.action === "compute") return { ...p, done: computeReady, accent: computeReady };
+      if (p.action === "compute") return { ...p, done: computeReady };
       return p;
     }),
     [orbit2Planets, stepStatus, computeReady]
@@ -663,7 +664,6 @@ export default function RadialCommand({
   const inCrosshair = !!pointPickingField;
 
   const activePointField = activeSubId === "set_origin" ? "origin" : activeSubId === "set_destination" ? "destination" : null;
-  const computeReady = !!(origin && destination);
   const activePointLabel = activePointField === "origin" ? "Inicio" : activePointField === "destination" ? "Destino" : "Punto";
 
   const startMapPick = useCallback((field) => {
@@ -736,11 +736,10 @@ export default function RadialCommand({
       return;
     }
     if (planet.type === "toggle") {
-      // Track toggle state locally so we can flip on/off
       setStepStatus((prev) => {
         const nowOn = !prev[`toggle-${planet.value}`];
         if (onToggleLayer) onToggleLayer(planet.value, nowOn);
-        emitActionToRight({ ...planet, value: planet.value, desc: nowOn ? `${planet.label} activado` : `${planet.label} desactivado` });
+        emitActionToRight({ ...planet, desc: nowOn ? `${planet.label} activado` : `${planet.label} desactivado` });
         return { ...prev, [`toggle-${planet.value}`]: nowOn };
       });
       return;
@@ -793,10 +792,41 @@ export default function RadialCommand({
       case "pick_info":   if (onPickInfo) onPickInfo(); emitActionToRight(planet); return;
       case "search_nearby": if (onSearchNearby) onSearchNearby(planet.value); emitActionToRight(planet); return;
       case "locate_me":   if (onLocateMe) onLocateMe(); emitActionToRight(planet); return;
-      case "cycle_skin":  setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
-      case "minimize":    setMinimized(true); return;
-      case "expert_mode": if (onOpenExpert) onOpenExpert(); return;
-      case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
+      case "reset_route":
+        if (onResetPoints) onResetPoints();
+        setStepStatus({});
+        setActiveSubId(null);
+        emitActionToRight({ id: "reset_route", label: "RUTA LIMPIADA", desc: "Origen y destino borrados", icon: "RotateCcw" });
+        return;
+      case "share_view":
+        try {
+          navigator.clipboard?.writeText(window.location.href);
+          emitActionToRight({ id: "share", label: "ENLACE COPIADO", desc: "URL copiada al portapapeles", icon: "Share2" });
+        } catch {
+          emitActionToRight({ id: "share", label: "COMPARTIR", desc: "No se pudo copiar el enlace", icon: "Share2" });
+        }
+        return;
+      case "show_help":
+        emitActionToRight({ id: "help", label: "AYUDA", desc: "Hover planetas · arrastra el orbe · ESC vuelve", icon: "HelpCircle" });
+        return;
+      case "voice_search":
+        emitActionToRight({ id: "voice", label: "VOZ", desc: "Función de voz próximamente", icon: "Mic" });
+        return;
+      case "recent_searches":
+        emitActionToRight({ id: "recent", label: "RECIENTES", desc: "Historial de búsquedas (próx.)", icon: "Clock" });
+        return;
+      case "saved_places":
+        emitActionToRight({ id: "saved", label: "GUARDADOS", desc: "Lugares favoritos (próx.)", icon: "Bookmark" });
+        return;
+      case "list_incidents":
+        emitActionToRight({ id: "incidents", label: "INCIDENCIAS", desc: "Ver panel izquierdo para listado", icon: "AlertTriangle" });
+        return;
+      case "show_weather":
+        emitActionToRight({ id: "weather_info", label: "TIEMPO", desc: "Datos meteorológicos en panel derecho", icon: "CloudRain" });
+        return;
+      case "report":
+        emitActionToRight({ id: "report", label: "REPORTAR", desc: "Función de reporte próximamente", icon: "Megaphone" });
+        return;
       default:
         emitActionToRight(planet);
     }
@@ -804,36 +834,23 @@ export default function RadialCommand({
 
   const centerContent = useMemo(() => {
     if (inCrosshair) {
-      const fieldLabel = pointPickingField === "origin" ? "INICIO" : "DESTINO";
-      return {
-        title: `${fieldLabel}`,
-        subtitle: "Click en el mapa",
-        color: pointPickingField === "destination" ? "#f87171" : "#4ade80",
-      };
+      const lbl = pointPickingField === "origin" ? "INICIO" : "DESTINO";
+      return { title: lbl, subtitle: "Click en el mapa", color: pointPickingField === "destination" ? "#f87171" : "#4ade80" };
     }
-    if (hoverPlanet) return {
-      title: hoverPlanet.label || hoverPlanet.id,
-      subtitle: hoverPlanet.desc || "",
-      color: "#fbbf24",
-    };
+    if (hoverPlanet) return { title: hoverPlanet.label || hoverPlanet.id, subtitle: hoverPlanet.desc || "", color: "#fbbf24" };
     if (mode === "navegador") {
-      if (!origin && !destination) return { title: "NAVEGAR", subtitle: "Fija inicio y destino", color: "#22d3ee" };
-      if (origin && !destination)  return { title: "DESTINO", subtitle: "Falta el destino", color: "#fbbf24" };
-      if (!origin && destination)  return { title: "INICIO",  subtitle: "Falta el origen",  color: "#4ade80" };
+      if (!origin && !destination) return { title: "NAVEGAR",  subtitle: "Fija inicio y destino",  color: "#22d3ee" };
+      if (origin && !destination)  return { title: "DESTINO",  subtitle: "Falta el destino",        color: "#fbbf24" };
+      if (!origin && destination)  return { title: "INICIO",   subtitle: "Falta el origen",         color: "#4ade80" };
       return { title: "CALCULAR", subtitle: "Pulsa Calcular →", color: "#22c55e" };
     }
-    if (mode === "capas") return { title: "CAPAS", subtitle: "Activa / desactiva", color: "#c084fc" };
-    if (mode === "info")  return { title: "INFO",  subtitle: "Inspecciona el mapa", color: "#38bdf8" };
-    if (mode === "cerca") return { title: "CERCA", subtitle: "POIs alrededor", color: "#fb923c" };
-    if (mode === "buscar")return { title: "BUSCAR",subtitle: "Dirección o lugar", color: "#a78bfa" };
-    if (mode === "yo")    return { title: "YO",    subtitle: "Mi posición", color: "#22d3ee" };
-    // main
+    if (mode === "capas")  return { title: "CAPAS",  subtitle: "Activa / desactiva", color: "#c084fc" };
+    if (mode === "info")   return { title: "INFO",   subtitle: "Inspecciona el mapa", color: "#38bdf8" };
+    if (mode === "cerca")  return { title: "CERCA",  subtitle: "POIs alrededor",      color: "#fb923c" };
+    if (mode === "buscar") return { title: "BUSCAR", subtitle: "Dirección o lugar",   color: "#a78bfa" };
+    if (mode === "yo")     return { title: "YO",     subtitle: "Mi posición",          color: "#22d3ee" };
     const cfg = MODES[mode];
-    return {
-      title: cfg?.centerLabel || "ORBEOS",
-      subtitle: cfg?.centerHint || "Hover para desplegar",
-      color: "#22d3ee",
-    };
+    return { title: cfg?.centerLabel || "ORBEOS", subtitle: cfg?.centerHint || "Hover para abrir", color: "#22d3ee" };
   }, [inCrosshair, pointPickingField, hoverPlanet, mode, origin, destination]);
 
   const rightMenuActions = useMemo(() => (
@@ -851,69 +868,10 @@ export default function RadialCommand({
 
   const handleSystemAction = useCallback((item) => {
     switch (item.action) {
-      case "locate_me": if (onLocateMe) onLocateMe(); return;
-      case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
-      case "reset": if (onResetPoints) onResetPoints(); setActiveSubId(null); setStepIdx(0); setStepStatus({}); setPointPickingField(null); return;
-      case "cycle_skin": setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
+            case "open_geocoder": if (onGeocoderOpen) onGeocoderOpen(); return;
+            case "cycle_skin": setSkinIdx(i => (i + 1) % CORE_SKINS.length); return;
       case "expert_mode": if (onOpenExpert) onOpenExpert(); return;
       case "minimize": setMinimized(true); return;
-      case "cycle_skin": setSkinIdx((i) => (i + 1) % CORE_SKINS.length); return;
-      case "reset_route":
-        if (onResetPoints) onResetPoints();
-        setStepStatus({});
-        setActiveSubId(null);
-        emitActionToRight({ id: "reset_route", label: "Ruta limpiada", desc: "Origen y destino borrados", icon: "RotateCcw" });
-        return;
-      case "compute":
-        if (!origin || !destination) {
-          emitActionToRight({ id: "compute_err", label: "Sin ruta", desc: "Fija primero origen y destino", icon: "AlertTriangle" });
-          return;
-        }
-        if (onCompute) onCompute();
-        emitActionToRight({ id: "compute", label: "Calculando ruta...", desc: `${transportMode?.toUpperCase() || "COCHE"} · optimizando`, icon: "Zap" });
-        return;
-      case "cycle_transport": {
-        const modes = ["car", "foot", "transit"];
-        const labels = { car: "Coche 🚗", foot: "A pie 🚶", transit: "Transporte 🚌" };
-        const next = modes[(modes.indexOf(transportMode || "car") + 1) % modes.length];
-        if (onTransportChange) onTransportChange(next);
-        emitActionToRight({ id: "transport", label: "MODO TRANSPORTE", desc: labels[next], icon: "Car" });
-        return;
-      }
-      case "show_help":
-        emitActionToRight({ id: "help", label: "AYUDA", desc: "Hover sobre los planetas para ver descripciones · arrastra el orbe · ESC para volver", icon: "HelpCircle" });
-        return;
-      case "voice_search":
-        emitActionToRight({ id: "voice", label: "VOZ", desc: "Función de voz próximamente disponible", icon: "Mic" });
-        return;
-      case "recent_searches":
-        emitActionToRight({ id: "recent", label: "RECIENTES", desc: "Historial de búsquedas (próximamente)", icon: "Clock" });
-        return;
-      case "saved_places":
-        emitActionToRight({ id: "saved", label: "GUARDADOS", desc: "Lugares favoritos (próximamente)", icon: "Bookmark" });
-        return;
-      case "list_incidents":
-        emitActionToRight({ id: "incidents", label: "INCIDENCIAS", desc: "Consulta el panel izquierdo para ver el listado completo", icon: "AlertTriangle" });
-        return;
-      case "show_weather":
-        emitActionToRight({ id: "weather_info", label: "TIEMPO", desc: "Datos meteorológicos cargando en panel derecho...", icon: "CloudRain" });
-        return;
-      case "share_view":
-        try {
-          const url = window.location.href;
-          navigator.clipboard?.writeText(url);
-          emitActionToRight({ id: "share", label: "ENLACE COPIADO", desc: url.slice(0, 50) + "...", icon: "Share2" });
-        } catch {
-          emitActionToRight({ id: "share", label: "COMPARTIR", desc: "No se pudo copiar el enlace", icon: "Share2" });
-        }
-        return;
-      case "report":
-        emitActionToRight({ id: "report", label: "REPORTAR", desc: "Función de reporte próximamente disponible", icon: "Megaphone" });
-        return;
-      case "search_nearby":
-        if (onSearchNearby) onSearchNearby(planet.value);
-        emitActionToRight({ id: `nearby-${planet.value}`, label: `CERCA · ${(planet.value || "").toUpperCase()}`, desc: `Buscando ${planet.label || planet.value} alrededor del orbe...`, icon: planet.icon || "Compass" });
-        return;
       default: return;
     }
   }, [onLocateMe, onGeocoderOpen, onResetPoints, onOpenExpert]);
