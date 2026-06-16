@@ -26,6 +26,7 @@ export default function CommandCenter() {
   const parkingMarkersRef = useRef([]);
   const accessibilityMarkersRef = useRef([]);
   const operatorMarkerRef = useRef(null);
+  const pickMarkersRef = useRef({ origin: null, destination: null });
   const friendMarkersRef = useRef([]);
   const measurePointsRef = useRef([]);
   const measureMarkersRef = useRef([]);
@@ -78,7 +79,7 @@ export default function CommandCenter() {
   const [pitch, setPitch] = useState(0);
   const [zoom, setZoom] = useState(11);
   const [bearing, setBearing] = useState(0);
-  const [mapCenter, setMapCenter] = useState({ lat: 40.41678, lng: -3.70379 });
+  const [mapCenter, setMapCenter] = useState({ lat: 41.3874, lng: 2.1686 });
   const [lastUpdate, setLastUpdate] = useState(null);
   const [clock, setClock] = useState(new Date());
   const [userLocationLabel, setUserLocationLabel] = useState("Detectando ubicación…");
@@ -130,42 +131,11 @@ export default function CommandCenter() {
   }, []);
 
   const renderOperatorMarker = useCallback((coords, name) => {
-    const map = mapRef.current;
-    if (!map || !coords) return;
-    if (operatorMarkerRef.current) operatorMarkerRef.current.remove();
-
-    const wrap = document.createElement("div");
-    wrap.style.display = "flex";
-    wrap.style.flexDirection = "column";
-    wrap.style.alignItems = "center";
-    wrap.style.gap = "6px";
-
-    const pin = document.createElement("div");
-    pin.style.width = "48px";
-    pin.style.height = "48px";
-    pin.style.borderRadius = "999px";
-    pin.style.background = "linear-gradient(180deg,#2563eb,#1d4ed8)";
-    pin.style.border = "4px solid white";
-    pin.style.boxShadow = "0 12px 30px rgba(37,99,235,0.35)";
-    pin.style.display = "grid";
-    pin.style.placeItems = "center";
-    pin.style.color = "white";
-    pin.style.fontSize = "26px";
-    pin.innerHTML = "⌖";
-
-    const label = document.createElement("div");
-    label.textContent = name || "Usuario";
-    label.style.padding = "6px 11px";
-    label.style.borderRadius = "999px";
-    label.style.background = "rgba(255,255,255,0.97)";
-    label.style.border = "1px solid rgba(37,99,235,0.22)";
-    label.style.boxShadow = "0 10px 28px rgba(15,23,42,0.14)";
-    label.style.color = "#0f172a";
-    label.style.font = "600 12px system-ui";
-
-    wrap.appendChild(pin);
-    wrap.appendChild(label);
-    operatorMarkerRef.current = new maplibregl.Marker({ element: wrap, anchor: "bottom" }).setLngLat(coords).addTo(map);
+    if (operatorMarkerRef.current) {
+      operatorMarkerRef.current.remove();
+      operatorMarkerRef.current = null;
+    }
+    // Main origin/destination markers are rendered by pickMarkersRef.
   }, []);
 
   // clock
@@ -235,6 +205,87 @@ export default function CommandCenter() {
     else map.once("styledata", ready);
   }, [radialOrigin, radialDest, mapStyle, mapReady]);
 
+  // Large visible pick-point markers: origin = geolocation pin, destination = arrival flag.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const remove = (key) => {
+      if (pickMarkersRef.current[key]) {
+        pickMarkersRef.current[key].remove();
+        pickMarkersRef.current[key] = null;
+      }
+    };
+
+    const build = (key, coords, cfg) => {
+      remove(key);
+      if (!coords) return;
+      const wrap = document.createElement("div");
+      wrap.style.display = "flex";
+      wrap.style.flexDirection = "column";
+      wrap.style.alignItems = "center";
+      wrap.style.gap = "7px";
+      wrap.style.pointerEvents = "auto";
+
+      const icon = document.createElement("div");
+      icon.style.width = "58px";
+      icon.style.height = "58px";
+      icon.style.borderRadius = cfg.round ? "999px" : "18px";
+      icon.style.display = "grid";
+      icon.style.placeItems = "center";
+      icon.style.background = cfg.bg;
+      icon.style.border = "4px solid white";
+      icon.style.boxShadow = cfg.shadow;
+      icon.style.color = "white";
+      icon.style.font = "800 28px system-ui";
+      icon.innerHTML = cfg.symbol;
+
+      const label = document.createElement("div");
+      label.textContent = cfg.label;
+      label.style.padding = "7px 12px";
+      label.style.borderRadius = "999px";
+      label.style.background = "rgba(255,255,255,0.96)";
+      label.style.border = "1px solid rgba(255,255,255,0.72)";
+      label.style.boxShadow = "0 14px 34px rgba(15,23,42,0.16)";
+      label.style.color = "#0f172a";
+      label.style.font = "800 13px system-ui";
+      label.style.whiteSpace = "nowrap";
+
+      const sub = document.createElement("div");
+      sub.textContent = cfg.sub;
+      sub.style.marginTop = "-3px";
+      sub.style.padding = "4px 9px";
+      sub.style.borderRadius = "999px";
+      sub.style.background = "rgba(15,23,42,0.80)";
+      sub.style.color = "white";
+      sub.style.font = "700 10px system-ui";
+      sub.style.whiteSpace = "nowrap";
+
+      wrap.appendChild(icon);
+      wrap.appendChild(label);
+      wrap.appendChild(sub);
+      pickMarkersRef.current[key] = new maplibregl.Marker({ element: wrap, anchor: "bottom" }).setLngLat(coords).addTo(map);
+    };
+
+    const userName = radialProfile?.name || "Usuario";
+    build("origin", radialOrigin, {
+      symbol: "⌖",
+      round: true,
+      bg: "linear-gradient(180deg,#2563eb,#1d4ed8)",
+      shadow: "0 18px 42px rgba(37,99,235,0.38)",
+      label: `${userName} · Punto 1`,
+      sub: "Inicio / geolocalización",
+    });
+    build("destination", radialDest, {
+      symbol: "⚑",
+      round: false,
+      bg: "linear-gradient(180deg,#f59e0b,#ea580c)",
+      shadow: "0 18px 42px rgba(234,88,12,0.36)",
+      label: "Destino · Punto 2",
+      sub: "Bandera de llegada",
+    });
+  }, [radialOrigin, radialDest, radialProfile, mapReady]);
+
   // Map click → set origin / destination based on radial picking mode.
   // If the orb requested a concrete target, only that point is modified.
   // If no target is specified, we keep the old sequential behaviour.
@@ -254,10 +305,10 @@ export default function CommandCenter() {
         addLog(`[RADIAL] INICIO fijado · ${lngLat[1].toFixed(4)},${lngLat[0].toFixed(4)}`, "ok");
         pushSideEntry({
           id: "origin",
-          title: "INICIO",
-          value: `${lngLat[1].toFixed(4)} , ${lngLat[0].toFixed(4)}`,
-          meta: "Punto elegido en el mapa · editable",
-          color: "#4ade80",
+          title: "INICIO · PUNTO 1",
+          value: radialProfile?.name || "Usuario",
+          meta: `${lngLat[1].toFixed(4)} , ${lngLat[0].toFixed(4)} · geolocalización`,
+          color: "#2563eb",
         });
         if (pickingTarget) {
           setPickingMode(false);
@@ -268,10 +319,10 @@ export default function CommandCenter() {
         addLog(`[RADIAL] DESTINO fijado · ${lngLat[1].toFixed(4)},${lngLat[0].toFixed(4)}`, "ok");
         pushSideEntry({
           id: "destination",
-          title: "DESTINO",
-          value: `${lngLat[1].toFixed(4)} , ${lngLat[0].toFixed(4)}`,
-          meta: "Punto elegido en el mapa · editable",
-          color: "#fbbf24",
+          title: "DESTINO · PUNTO 2",
+          value: "Bandera de llegada",
+          meta: `${lngLat[1].toFixed(4)} , ${lngLat[0].toFixed(4)} · destino`,
+          color: "#f59e0b",
         });
         setPickingMode(false);
         setPickingTarget(null);
@@ -926,10 +977,115 @@ export default function CommandCenter() {
     else { setMeasureMode(true); addLog("[TOOL] Measure tool armed · click points on map", "info"); }
   };
 
+  const removeLayerAndSource = useCallback((layerId, sourceId) => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+  }, []);
+
+  const renderOperationalFallback = useCallback((kind, visible) => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const sourceId = `mrc-fallback-${kind}`;
+    const layerId = `mrc-fallback-${kind}-layer`;
+    const labelId = `mrc-fallback-${kind}-label`;
+    if (map.getLayer(labelId)) map.removeLayer(labelId);
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+    if (!visible) return;
+
+    const c = map.getCenter();
+    const makeLine = (dx, dy, color, name) => ({
+      type: "Feature",
+      properties: { color, name },
+      geometry: { type: "LineString", coordinates: [
+        [c.lng - dx, c.lat - dy],
+        [c.lng - dx / 3, c.lat - dy / 4],
+        [c.lng + dx / 2, c.lat + dy / 3],
+        [c.lng + dx, c.lat + dy],
+      ] },
+    });
+    const makePoint = (dx, dy, color, name) => ({
+      type: "Feature",
+      properties: { color, name },
+      geometry: { type: "Point", coordinates: [c.lng + dx, c.lat + dy] },
+    });
+
+    let features = [];
+    let type = "line";
+    if (kind === "flow" || kind === "traffic") {
+      features = [
+        makeLine(0.030, 0.014, "#ef4444", "Tráfico intenso"),
+        makeLine(0.022, -0.018, "#f59e0b", "Tráfico medio"),
+        makeLine(-0.028, 0.010, "#22c55e", "Fluido"),
+      ];
+    } else if (kind === "incident") {
+      type = "circle";
+      features = [
+        makePoint(0.012, 0.006, "#ef4444", "Incidencia"),
+        makePoint(-0.016, 0.010, "#f59e0b", "Obras"),
+        makePoint(0.006, -0.014, "#ef4444", "Retención"),
+      ];
+    } else if (kind === "weather") {
+      type = "circle";
+      features = [
+        makePoint(0.000, 0.000, "#38bdf8", "Radar lluvia"),
+        makePoint(0.020, 0.010, "#60a5fa", "Nube"),
+        makePoint(-0.018, -0.012, "#93c5fd", "Nube"),
+      ];
+    }
+
+    if (!features.length) return;
+    map.addSource(sourceId, { type: "geojson", data: { type: "FeatureCollection", features } });
+    if (type === "line") {
+      map.addLayer({
+        id: layerId,
+        type: "line",
+        source: sourceId,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": 8, "line-opacity": 0.88 },
+      });
+    } else {
+      map.addLayer({
+        id: layerId,
+        type: "circle",
+        source: sourceId,
+        paint: {
+          "circle-color": ["get", "color"],
+          "circle-radius": kind === "weather" ? 28 : 11,
+          "circle-opacity": kind === "weather" ? 0.28 : 0.92,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+    }
+    map.addLayer({
+      id: labelId,
+      type: "symbol",
+      source: sourceId,
+      layout: { "text-field": ["get", "name"], "text-size": 12, "text-offset": [0, 1.4], "text-anchor": "top" },
+      paint: { "text-color": "#0f172a", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+    });
+  }, []);
+
   // ---- Azure raster tile layers ----
   const ensureAzureLayer = useCallback((kind, visible) => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
+
+    if (kind === "satellite") {
+      if (visible && mapStyle !== "satellite") setMapStyle("satellite");
+      if (!visible && mapStyle === "satellite") setMapStyle("light");
+      return;
+    }
+
+    // Always render a local visual fallback. Azure tiles can fail if the key is missing,
+    // if Render env is not updated, or if the selected tile has no traffic data.
+    if (kind === "flow") renderOperationalFallback("flow", visible);
+    if (kind === "incident") renderOperationalFallback("incident", visible);
+    if (kind === "weather") renderOperationalFallback("weather", visible);
+
     const srcId = `azure-${kind}-src`;
     const layerId = `azure-${kind}-layer`;
     const hasSrc = !!map.getSource(srcId);
@@ -960,7 +1116,7 @@ export default function CommandCenter() {
       if (map.getLayer(layerId)) map.removeLayer(layerId);
       if (map.getSource(srcId)) map.removeSource(srcId);
     }
-  }, []);
+  }, [mapStyle, renderOperationalFallback]);
 
   useEffect(() => { ensureAzureLayer("flow", showAzureFlow); }, [showAzureFlow, ensureAzureLayer, mapStyle]);
   useEffect(() => { ensureAzureLayer("incident", showAzureIncidents); }, [showAzureIncidents, ensureAzureLayer, mapStyle]);
@@ -1097,7 +1253,7 @@ export default function CommandCenter() {
       type: "line",
       source: ROUTE_SOURCE,
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": "#fbbf24", "line-width": 5, "line-opacity": 0.85 },
+      paint: { "line-color": "#1a73e8", "line-width": 7, "line-opacity": 0.92, "line-blur": 0.4 },
     });
     // fit bounds
     const coords = geometry.coordinates;
@@ -1368,7 +1524,7 @@ export default function CommandCenter() {
       addLog("[NAV ] Centered on operator position", "ok");
       pushSideEntry({
         id: "origin",
-        title: "INICIO",
+        title: "INICIO · PUNTO 1",
         value: radialProfile?.name || "Usuario",
         meta: `${pos.coords.latitude.toFixed(4)} , ${pos.coords.longitude.toFixed(4)}`,
         color: "#2563eb",
@@ -1406,7 +1562,7 @@ export default function CommandCenter() {
         mapRef.current?.flyTo({ center: coords, zoom: 15.8, duration: 1300 });
         pushSideEntry({
           id: "origin",
-          title: "INICIO",
+          title: "INICIO · PUNTO 1",
           value: name || "Visitor",
           meta: `${pos.coords.latitude.toFixed(4)} , ${pos.coords.longitude.toFixed(4)}`,
           color: "#2563eb",
@@ -1436,7 +1592,7 @@ export default function CommandCenter() {
           mapRef.current.flyTo({ center: coords, zoom: 15.6, duration: 1300 });
           pushSideEntry({
             id: "origin",
-            title: "INICIO",
+            title: "INICIO · PUNTO 1",
             value: name || "Visitor",
             meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`,
             color: "#2563eb",
@@ -1458,10 +1614,10 @@ export default function CommandCenter() {
       const coords = [r.lon, r.lat];
       if (field === "origin") {
         setRadialOrigin(coords);
-        pushSideEntry({ id: "origin", title: "INICIO", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#4ade80" });
+        pushSideEntry({ id: "origin", title: "INICIO · PUNTO 1", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#2563eb" });
       } else if (field === "destination") {
         setRadialDest(coords);
-        pushSideEntry({ id: "destination", title: "DESTINO", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#fbbf24" });
+        pushSideEntry({ id: "destination", title: "DESTINO · PUNTO 2", value: query, meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#f59e0b" });
       } else if (field === "boot") {
         userTouchedMapRef.current = true;
         setRadialOrigin(coords);
@@ -1469,7 +1625,7 @@ export default function CommandCenter() {
         setUserLocationLabel(r.display_name || query);
         setCity(inferNearestCityId(r.lat, r.lon));
         renderOperatorMarker(coords, radialProfile?.name || "Usuario");
-        pushSideEntry({ id: "origin", title: "INICIO", value: radialProfile?.name || "Usuario", meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#2563eb" });
+        pushSideEntry({ id: "origin", title: "INICIO · PUNTO 1", value: radialProfile?.name || "Usuario", meta: `${r.lat.toFixed(4)} , ${r.lon.toFixed(4)}`, color: "#2563eb" });
         mapRef.current?.flyTo({ center: coords, zoom: 15.4, duration: 1300 });
       }
       mapRef.current?.flyTo({ center: coords, zoom: 15.4, duration: 1100 });
@@ -1519,7 +1675,7 @@ export default function CommandCenter() {
       if (!dest) throw new Error("Destino no encontrado");
       const destinationCoords = [dest.lon, dest.lat];
       setRadialDest(destinationCoords);
-      pushSideEntry({ id: "destination", title: "DESTINO", value: destinationQuery, meta: `${dest.lat.toFixed(4)} , ${dest.lon.toFixed(4)}`, color: "#fbbf24" });
+      pushSideEntry({ id: "destination", title: "DESTINO · PUNTO 2", value: destinationQuery, meta: `${dest.lat.toFixed(4)} , ${dest.lon.toFixed(4)}`, color: "#f59e0b" });
 
       const palette = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
       const built = [];
@@ -1975,7 +2131,7 @@ export default function CommandCenter() {
       </aside>
 
       {!expertMode && (
-        <div className="absolute left-4 top-4 z-40 max-w-[520px] rounded-[22px] border border-blue-100 bg-white/90 px-4 py-3 shadow-[0_16px_60px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+        <div className="glass-liquid absolute left-4 top-4 z-40 max-w-[520px] rounded-[22px] px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-blue-600">Ubicación activa</div>
           <div className="mt-1 text-[22px] font-semibold leading-tight text-slate-950">{userLocationLabel}</div>
           <div className="mt-1 text-[12px] text-slate-600">El punto azul marca el inicio del usuario. El orbe trabaja desde ahí.</div>
@@ -2088,7 +2244,7 @@ export default function CommandCenter() {
       </>)}
 
       {!expertMode && showAccessibility && accessibilityData && (
-        <div className="absolute left-4 bottom-[118px] z-50 max-w-[460px] rounded-[24px] border border-emerald-100 bg-white/92 p-4 shadow-[0_20px_70px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+        <div className="glass-liquid absolute left-4 bottom-[118px] z-50 max-w-[460px] rounded-[24px] p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.26em] text-emerald-700">Movilidad inclusiva</div>
@@ -2114,7 +2270,7 @@ export default function CommandCenter() {
       {/* ===== CONNECTED SYSTEMS · radial mode diagnostic strip ===== */}
       {!expertMode && (
         <div
-          className="absolute left-4 right-4 bottom-4 z-50 rounded-[22px] border border-white/55 bg-white/78 px-3 py-2 shadow-[0_18px_65px_rgba(15,23,42,0.22)] backdrop-blur-2xl"
+          className="glass-liquid absolute left-4 right-4 bottom-4 z-50 rounded-[22px] px-3 py-2"
           data-testid="system-status-dock"
         >
           <div className="mb-1 flex items-center justify-between gap-3 px-1">

@@ -862,7 +862,7 @@ app.include_router(api_router)
 # AZURE MAPS MOBILITY STACK · proxy endpoints
 # Keep the subscription key server-side; the browser only talks to /api/azure/*
 # ============================================================================
-AZURE_KEY = os.environ.get("AZURE_MAPS_KEY", "")
+AZURE_KEY = (os.environ.get("AZURE_MAPS_KEY") or os.environ.get("AZURE_MAPS_PRIMARY_KEY") or os.environ.get("AZURE_SUBSCRIPTION_KEY") or "")
 AZURE_BASE = "https://atlas.microsoft.com"
 azure_router = APIRouter(prefix="/api/azure")
 
@@ -907,7 +907,7 @@ async def _azure_get_json(url: str, ttl: int = 60) -> Any:
 
 @azure_router.get("/status")
 async def azure_status():
-    return {"enabled": _azure_enabled(),
+    return {"enabled": _azure_enabled(), "key_env": "AZURE_MAPS_KEY/AZURE_MAPS_PRIMARY_KEY/AZURE_SUBSCRIPTION_KEY",
             "services": ["traffic-flow", "traffic-incident", "weather-radar",
                          "basemap-satellite", "route", "range",
                          "search-poi", "ev-charging", "weather-alerts",
