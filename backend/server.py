@@ -14,6 +14,8 @@ import math
 import logging
 import asyncio
 import html
+import csv
+import io
 import httpx
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
@@ -423,6 +425,147 @@ CITIES = {
     "girona": {"name": "Girona", "lat": 41.9794, "lon": 2.8214, "zoom": 12, "extra": "sct"},
 }
 
+
+# ----------------------------- Accessibility / Inclusive Mobility -----------------------------
+# Official Barcelona source listed in datos.gob / Open Data BCN. The large CSV can be slow,
+# so the endpoint caches and samples a bounded number of records around the viewport.
+BCN_ACCESSIBILITY_2021_CSV = (
+    "https://opendata-ajuntament.barcelona.cat/data/dataset/157b8ef7-e437-4233-a684-edd440b9d3ce/"
+    "resource/e389321c-c5b6-4dbd-90b8-f517e9732f90/download"
+)
+BCN_ACCESSIBILITY_2019_CSV = (
+    "https://opendata-ajuntament.barcelona.cat/data/dataset/157b8ef7-e437-4233-a684-edd440b9d3ce/"
+    "resource/ab4beb40-f945-421f-92c0-0cc1efcac93b/download"
+)
+
+def _find_float(row: Dict[str, Any], candidates: List[str]) -> Optional[float]:
+    lower = {str(k).strip().lower(): v for k, v in row.items()}
+    for c in candidates:
+        for k, v in lower.items():
+            if c in k and v not in (None, ""):
+                try:
+                    return float(str(v).replace(",", "."))
+                except Exception:
+                    pass
+    return None
+
+def _accessibility_status(text: str) -> Dict[str, Any]:
+    t = (text or "").lower()
+    bad = ["no accessible", "inaccessible", "mal estado", "discontinu", "obstacle", "obstáculo", "barrera", "graó", "esgla", "steep", "alta pendiente"]
+    warn = ["limited", "parcial", "moderad", "pendiente", "pendent", "adoqu", "cobble", "irregular", "atención"]
+    good = ["accessible", "adaptat", "adaptado", "lowered", "ramp", "rampa", "yes", "baixat", "suau"]
+    if any(w in t for w in bad):
+        return {"status": "low", "label": "Baja accesibilidad", "score": 30, "color": "#ef4444"}
+    if any(w in t for w in warn):
+        return {"status": "medium", "label": "Accesibilidad media", "score": 60, "color": "#f59e0b"}
+    if any(w in t for w in good):
+        return {"status": "high", "label": "Alta accesibilidad", "score": 85, "color": "#16a34a"}
+    return {"status": "unknown", "label": "Sin datos suficientes", "score": 50, "color": "#64748b"}
+
+def _accessibility_feature(fid: str, lat: float, lon: float, title: str, description: str, source: str) -> Dict[str, Any]:
+    acc = _accessibility_status(f"{title} {description}")
+    return {
+        "id": fid,
+        "lat": lat,
+        "lon": lon,
+        "title": title or acc["label"],
+        "description": description or "Indicador de accesibilidad",
+        "status": acc["status"],
+        "label": acc["label"],
+        "score": acc["score"],
+        "color": acc["color"],
+        "source": source,
+    }
+
+async def fetch_osm_accessibility(lat: float, lon: float, radius: int = 1200) -> Dict[str, Any]:
+    cache_key = f"access_osm_{round(lat,3)}_{round(lon,3)}_{radius}"
+    cached = cache_get(cache_key, ttl=300)
+    if cached:
+        return cached
+    q = f"""
+    [out:json][timeout:18];
+    (
+      node(around:{radius},{lat},{lon})["wheelchair"];
+      way(around:{radius},{lat},{lon})["wheelchair"];
+      node(around:{radius},{lat},{lon})["toilets:wheelchair"];
+      node(around:{radius},{lat},{lon})["kerb"];
+      node(around:{radius},{lat},{lon})["tactile_paving"];
+      node(around:{radius},{lat},{lon})["ramp"];
+      way(around:{radius},{lat},{lon})["incline"];
+      way(around:{radius},{lat},{lon})["surface"];
+      way(around:{radius},{lat},{lon})["smoothness"];
+    );
+    out center tags 180;
+    """
+    raw = await fetch_text(OVERPASS_URL, timeout=24, method="POST", data=q)
+    features: List[Dict[str, Any]] = []
+    if raw:
+        try:
+            j = __import__("json").loads(raw)
+            for i, el in enumerate(j.get("elements", [])[:220]):
+                tags = el.get("tags") or {}
+                el_lat = el.get("lat") or (el.get("center") or {}).get("lat")
+                el_lon = el.get("lon") or (el.get("center") or {}).get("lon")
+                if el_lat is None or el_lon is None:
+                    continue
+                name = tags.get("name") or tags.get("amenity") or tags.get("highway") or tags.get("wheelchair") or "Punto accesibilidad"
+                desc = " · ".join(f"{k}={v}" for k, v in tags.items() if k in ["wheelchair", "toilets:wheelchair", "kerb", "tactile_paving", "ramp", "incline", "surface", "smoothness"])
+                features.append(_accessibility_feature(f"OSM-ACC-{i}", float(el_lat), float(el_lon), str(name), desc, "OpenStreetMap / Overpass"))
+        except Exception as e:
+            logger.warning(f"OSM accessibility parse failed: {e}")
+    result = {"status": "OK" if features else "EMPTY", "features": features, "source": "OSM Overpass", "count": len(features)}
+    cache_set(cache_key, result)
+    return result
+
+async def fetch_bcn_accessibility(lat: float, lon: float, radius: int = 1500) -> Dict[str, Any]:
+    cache_key = "access_bcn_csv_2021"
+    raw = cache_get(cache_key, ttl=12 * 3600)
+    if not raw:
+        raw = await fetch_text(BCN_ACCESSIBILITY_2021_CSV, timeout=28) or await fetch_text(BCN_ACCESSIBILITY_2019_CSV, timeout=22)
+        if raw:
+            cache_set(cache_key, raw)
+    features: List[Dict[str, Any]] = []
+    if raw:
+        try:
+            # Open Data BCN CSVs normally use comma or semicolon; sniff safely.
+            sample = raw[:4096]
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+            reader = csv.DictReader(io.StringIO(raw), dialect=dialect)
+            for idx, row in enumerate(reader):
+                rlat = _find_float(row, ["lat", "y", "geo_epgs_4326_lat", "latitude"])
+                rlon = _find_float(row, ["lon", "lng", "x", "geo_epgs_4326_lon", "longitude"])
+                if rlat is None or rlon is None:
+                    continue
+                if haversine_km(lon, lat, rlon, rlat) > (radius / 1000.0):
+                    continue
+                text = " · ".join(str(v) for v in row.values() if v not in (None, ""))[:420]
+                title = row.get("PARAMETRE") or row.get("Paràmetre") or row.get("parametre") or row.get("TIPUS") or "Accesibilidad vía pública"
+                features.append(_accessibility_feature(f"BCN-ACC-{idx}", rlat, rlon, str(title), text, "Open Data BCN · Accesibilidad vía pública"))
+                if len(features) >= 260:
+                    break
+        except Exception as e:
+            logger.warning(f"BCN accessibility CSV parse failed: {e}")
+    result = {"status": "OK" if features else "EMPTY", "features": features, "source": "Open Data BCN", "count": len(features)}
+    return result
+
+def _score_accessibility(features: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not features:
+        return {"score": 50, "label": "Sin datos suficientes", "high": 0, "medium": 0, "low": 0, "unknown": 0}
+    counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
+    total = 0
+    for f in features:
+        st = f.get("status", "unknown")
+        counts[st] = counts.get(st, 0) + 1
+        total += int(f.get("score", 50))
+    score = round(total / max(len(features), 1))
+    if score >= 75:
+        label = "Alta accesibilidad"
+    elif score >= 50:
+        label = "Accesibilidad media"
+    else:
+        label = "Baja accesibilidad"
+    return {"score": score, "label": label, **counts}
+
 # ----------------------------- API endpoints -----------------------------
 
 @api_router.get("/")
@@ -624,6 +767,71 @@ async def route(
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
+@api_router.get("/accessibility/osm")
+async def accessibility_osm(lat: float, lon: float, radius: int = Query(1200, ge=100, le=5000)):
+    return {**(await fetch_osm_accessibility(lat, lon, radius)), "generated_at": datetime.now(timezone.utc).isoformat()}
+
+@api_router.get("/accessibility/barcelona")
+async def accessibility_barcelona(lat: float, lon: float, radius: int = Query(1500, ge=100, le=5000)):
+    return {**(await fetch_bcn_accessibility(lat, lon, radius)), "generated_at": datetime.now(timezone.utc).isoformat()}
+
+@api_router.get("/accessibility/score")
+async def accessibility_score(lat: float, lon: float, radius: int = Query(1500, ge=100, le=5000)):
+    osm, bcn = await asyncio.gather(fetch_osm_accessibility(lat, lon, radius), fetch_bcn_accessibility(lat, lon, radius), return_exceptions=True)
+    features: List[Dict[str, Any]] = []
+    sources: Dict[str, str] = {}
+    for label, res in [("OSM", osm), ("Open Data BCN", bcn)]:
+        if isinstance(res, Exception):
+            sources[label] = "ERROR"
+        else:
+            sources[label] = res.get("status", "UNKNOWN")
+            features.extend(res.get("features", []))
+    score = _score_accessibility(features)
+    return {
+        "status": "OK" if features else "EMPTY",
+        "center": {"lat": lat, "lon": lon},
+        "radius_m": radius,
+        "count": len(features),
+        "score": score,
+        "sources": sources,
+        "features": features[:420],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "disclaimer": "Indicadores informativos, no certificación oficial de accesibilidad.",
+    }
+
+@api_router.get("/geo-services/search")
+async def geo_services_search(q: str = "accessibility"):
+    query = q.lower()
+    items = [
+        {
+            "id": "idee-directory",
+            "name": "IDEE · Directorio de servicios OGC/INSPIRE",
+            "type": "directory",
+            "status": "manual-review",
+            "url": "https://www.idee.es/web/idee/segun-tipo-de-servicio",
+            "use": "Descubrir WMS, WMTS, WFS y OGC API oficiales para capas geoespaciales.",
+        },
+        {
+            "id": "bcn-accessibility",
+            "name": "Open Data BCN · Accesibilidad vía pública",
+            "type": "csv",
+            "status": "integrated",
+            "url": BCN_ACCESSIBILITY_2021_CSV,
+            "use": "Indicadores oficiales de accesibilidad urbana de Barcelona.",
+        },
+        {
+            "id": "osm-wheelchair",
+            "name": "OpenStreetMap · wheelchair / kerb / ramp / tactile_paving",
+            "type": "overpass",
+            "status": "integrated",
+            "url": OVERPASS_URL,
+            "use": "POIs y puntos con etiquetas colaborativas de accesibilidad.",
+        },
+    ]
+    if query and query not in ("accessibility", "accesibilidad", "all"):
+        items = [i for i in items if query in i["name"].lower() or query in i["use"].lower()]
+    return {"count": len(items), "items": items, "generated_at": datetime.now(timezone.utc).isoformat()}
+
 @api_router.get("/health")
 async def health():
     async def check(url):
@@ -643,6 +851,7 @@ async def health():
             "SCT": "OK" if sct_ok else "DOWN",
             "Madrid": "OK" if mad_ok else "DOWN",
             "OSM": "OK",
+            "Accessibility": "OK",
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
