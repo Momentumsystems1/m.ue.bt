@@ -326,6 +326,7 @@ export default function CommandCenter() {
       )}
 
       <OrbeoCommand
+        mapRef={mapRef}
         origin={origin}
         destination={destination}
         onOriginChange={handleOriginChange}
