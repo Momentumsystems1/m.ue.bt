@@ -358,15 +358,9 @@ export default function CommandCenter() {
     let initialZoom   = 14.4;
     let initialPitch  = 0;
     let initialBearing = 0;
-    try {
-      const saved = JSON.parse(localStorage.getItem("mrc:last-view") || "null");
-      if (saved && Number.isFinite(saved.lng) && Number.isFinite(saved.lat)) {
-        initialCenter  = [saved.lng, saved.lat];
-        initialZoom    = saved.zoom ?? initialZoom;
-        initialPitch   = saved.pitch ?? initialPitch;
-        initialBearing = saved.bearing ?? initialBearing;
-      }
-    } catch { /* localStorage unavailable or corrupt */ }
+    // Do not restore an old saved Madrid view here. The simple mode must start
+    // from a neutral close map and then move to the user's declared location.
+    // The live view is still persisted after the user interacts with the map.
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: STYLES[mapStyle].style,
@@ -1368,6 +1362,7 @@ export default function CommandCenter() {
       setCity(inferNearestCityId(pos.coords.latitude, pos.coords.longitude));
       setShowAzureFlow(true);
       setShowAzureIncidents(true);
+      setShowAzureWeather(true);
       mapRef.current.flyTo({ center: coords, zoom: 15.8, duration: 1200 });
       renderOperatorMarker(coords, radialProfile?.name || "Usuario");
       addLog("[NAV ] Centered on operator position", "ok");
@@ -1406,6 +1401,7 @@ export default function CommandCenter() {
         setCity(inferNearestCityId(pos.coords.latitude, pos.coords.longitude));
         setShowAzureFlow(true);
         setShowAzureIncidents(true);
+        setShowAzureWeather(true);
         renderOperatorMarker(coords, name || "Visitor");
         mapRef.current?.flyTo({ center: coords, zoom: 15.8, duration: 1300 });
         pushSideEntry({
@@ -1435,6 +1431,7 @@ export default function CommandCenter() {
           setCity(inferNearestCityId(r.lat, r.lon));
           setShowAzureFlow(true);
           setShowAzureIncidents(true);
+          setShowAzureWeather(true);
           renderOperatorMarker(coords, name || "Visitor");
           mapRef.current.flyTo({ center: coords, zoom: 15.6, duration: 1300 });
           pushSideEntry({
@@ -2188,6 +2185,9 @@ export default function CommandCenter() {
           else if (String(e.id).includes("bikes")) setShowMobility(false);
           else if (String(e.id).includes("ev")) setShowEVPanel(false);
           else if (String(e.id).includes("traffic")) { setShowAzureFlow(false); setShowAzureIncidents(false); }
+          else if (String(e.id).includes("incident")) setShowAzureIncidents(false);
+          else if (String(e.id).includes("weather")) setShowAzureWeather(false);
+          else if (String(e.id).includes("satellite")) setShowAzureSat(false);
           else if (String(e.id).includes("accessibility")) { setShowAccessibility(false); setAccessibilityData(null); }
           else if (String(e.id).startsWith("multi-")) setFriendRoutes((rows) => rows.filter((r) => `multi-${r.id}` !== e.id));
           setSideEntries((arr) => arr.filter((x) => x.id !== e.id));
@@ -2227,6 +2227,8 @@ export default function CommandCenter() {
         }}
         onToggleLayer={(layer, on) => {
           if (layer === "traffic") { setShowAzureFlow(on); setShowAzureIncidents(on); }
+          if (layer === "incident") setShowAzureIncidents(on);
+          if (layer === "satellite") setShowAzureSat(on);
           if (layer === "parking") setShowParking(on);
           if (layer === "bikes")   setShowMobility(on);
           if (layer === "weather") setShowAzureWeather(on);

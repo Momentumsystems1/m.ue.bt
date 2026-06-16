@@ -47,8 +47,9 @@ export const STYLE_LIGHT = {
     },
   },
   layers: [
-    { id: "bg", type: "background", paint: { "background-color": "#f7f9fb" } },
-    { id: "carto-light", type: "raster", source: "carto-light", paint: { "raster-saturation": 0.02, "raster-contrast": 0.16, "raster-brightness-min": 0.02, "raster-brightness-max": 0.98 } },
+    { id: "bg", type: "background", paint: { "background-color": "#eef5ff" } },
+    { id: "carto-light", type: "raster", source: "carto-light", paint: { "raster-saturation": 0.10, "raster-contrast": 0.20, "raster-brightness-min": 0.04, "raster-brightness-max": 1.0 } },
+    { id: "premium-blue-wash", type: "background", paint: { "background-color": "rgba(239,246,255,0.10)" } },
   ],
 };
 
