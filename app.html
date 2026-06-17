@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MOMENTUM SYSTEMS Pilot1 V1.36</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.9.2/mapbox-gl.css" rel="stylesheet">
+<link href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.2/mapbox-gl.js"></script>
+<script>window.maplibregl = window.mapboxgl;</script>
+<script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/theme.css">
+<link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/orbe.css">
+</head>
+<body>
+<div id="map"></div>
+<div id="mapFallback" class="map-fallback" aria-hidden="true">
+  <iframe title="Mapa base Km 0 Madrid" src="https://www.openstreetmap.org/export/embed.html?bbox=-3.7085%2C40.4140%2C-3.6992%2C40.4197&amp;layer=mapnik&amp;marker=40.41678%2C-3.70379"></iframe>
+  <div class="map-fallback-label">Mapa base · Km 0 Madrid · modo respaldo</div>
+</div>
+<div class="map-ui">
+  <header class="map-header command-header">
+    <div class="brand pilot-brand"><img class="brand-logo" src="assets/img/momentum-logo.svg" alt="Momentum"><div><b>pilot1</b><span>LIVE ROAD INTELLIGENCE · AZURE MAPS TRIAL</span></div></div>
+    <div class="search command-search">
+      <div class="search-main">
+        <input id="searchInput" placeholder="Buscar dirección, ciudad, carretera o punto operativo">
+        <button class="btn primary" id="searchBtn">Ir</button>
+        <button class="btn secondary compact" id="locateBtn" title="Centrar en mi posición">⌖</button>
+      </div>
+      <div class="dgt-ticker" aria-label="Información operativa DGT"><span id="dgtTickerText">DGT · cargando avisos operativos · Azure Maps tráfico · Momentum V16 layer · rutas y medición activas</span></div>
+    </div>
+    <div class="top-actions">
+      <select id="citySelect" class="city" aria-label="Ciudad operativa"></select>
+      <select id="basemapSelect" class="city" aria-label="Vista de mapa" data-help-title="Vista de mapa" data-help-desc="Cambia entre Mapbox Standard 3D, navegación, satélite, noche, relieve y respaldos Azure/OSM. Mapbox da el mapa premium; Azure conserva routing/tráfico; pilot1 añade inteligencia operativa." data-help-actions="Operativo · Relieve · Satélite · Híbrido · Noche · Contraste">
+        <option value="mapbox-standard">Mapbox Standard 3D</option>
+        <option value="mapbox-navigation">Navegación premium</option>
+        <option value="mapbox-navigation-night">Navegación noche</option>
+        <option value="mapbox-satellite">Satélite + calles</option>
+        <option value="mapbox-streets">Calles detalladas</option>
+        <option value="mapbox-outdoors">Relieve / terreno</option>
+        <option value="mapbox-light">Claro minimal</option>
+        <option value="mapbox-dark">Oscuro técnico</option>
+        <option value="azure">Azure operativo</option>
+        <option value="azure-hybrid">Azure híbrido</option>
+        <option value="osm">OSM respaldo</option>
+      </select>
+      <button class="btn light" id="reloadBtn" data-help-title="Recargar fuentes" data-help-desc="Actualiza incidencias, capas privadas, infraestructura OSM y cola operativa sin cambiar la vista actual." data-help-actions="Actualizar · mantener ciudad · refrescar informe">↻ Recargar</button>
+      <button class="btn light" id="dockAllBtn" data-help-title="Restaurar paneles" data-help-desc="Devuelve todos los módulos a la barra superior y limpia las ventanas liberadas por el visitante." data-help-actions="Dock all · cerrar módulos · ordenar pantalla">Dock all</button>
+      <button class="btn light" id="presentationBtn" data-help-title="Modo presentación" data-help-desc="Limpia la interfaz para enseñar el mapa y abrir solo los módulos clave durante una reunión comercial." data-help-actions="Mostrar mapa · ocultar ruido · demo ejecutiva">Presentación</button>
+      <a class="btn light" href="diagnostico.html" data-help-title="Diagnóstico técnico" data-help-desc="Comprueba estado de fuentes, configuración y despliegue antes de enseñar la herramienta a un cliente." data-help-actions="Ver fuentes · revisar configuración · soporte">Diagnóstico</a>
+    </div>
+    <nav class="module-dock header-dock" id="moduleDock" aria-label="Herramientas operativas"></nav>
+  </header>
+
+  <section class="center-console hide" id="centerConsole">
+    <div class="console-head">
+      <h3 id="consoleTitle">CONNECTING ROAD COMMAND</h3>
+      <button id="consoleClose">✕ Cerrar</button>
+    </div>
+    <div class="console-steps">
+      <span>■ Reposicionando mapa</span><b id="stepMap" class="ok">OK</b>
+      <span>■ Verificando fuentes live</span><b id="stepSources" class="run">RUN</b>
+      <span>■ Generando informe táctico</span><b id="stepReport" class="wait">WAIT</b>
+    </div>
+    <div class="console-report" id="consoleReport">Inicializando informe operativo...</div>
+  </section>
+
+  <aside class="panel">
+    <section class="card command-card module-card" style="animation-delay:.1s">
+      <div class="card-title-row"><h3>Capas / fuentes</h3><span class="live-pill">LIVE</span></div>
+      <p class="muted" style="margin-bottom:8px">Panel operativo con iconos diferenciados por tipo de incidencia, fuentes DGT/DATEX2, datos urbanos, OSM, Mapillary y capa privada V16.</p>
+      <div id="layers"></div>
+    </section>
+
+    <section class="card command-card module-card" style="animation-delay:.18s">
+      <h3>Comandos</h3>
+      <div class="tool-row tool-grid-2">
+        <button class="btn secondary" id="measureBtn">📏 Medir calle</button>
+        <button class="btn secondary" id="clearMeasureBtn">🗑 Limpiar</button>
+        <button class="btn secondary" id="fitBtn">◎ Ver eventos</button>
+        <button class="btn secondary" id="heatmapBtn">🔥 Heatmap OFF</button>
+        <button class="btn secondary" id="azureTrafficBtn" data-help-title="Tráfico Azure" data-help-desc="Activa o desactiva la capa de flujo de tráfico Azure Maps sobre el mapa base." data-help-actions="Tráfico · flujo relativo · carreteras lentas">🚦 Tráfico Azure ON</button>
+        <button class="btn secondary" id="trafficIntelBtn" data-help-title="Traffic Intelligence" data-help-desc="Convierte eventos visibles y tráfico de ruta en lectura operativa: retenciones, riesgo, ahorro y acciones recomendadas." data-help-actions="Analizar · priorizar · explicar">📡 Traffic Intel</button>
+        <button class="btn secondary" id="exportBtn">⬇ GeoJSON</button>
+        <button class="btn secondary" id="copyReportBtn">⧉ Copiar informe</button>
+      </div>
+      <div class="measure-line" id="measureInfo">Modo medir apagado.</div>
+    </section>
+
+    <section class="card command-card route-card module-card" style="animation-delay:.26s">
+      <h3>Ruta + CO₂ estimado</h3>
+      <p class="muted tiny">Calcula rutas con Azure Maps, tráfico e incidencias visibles. El CO₂ es estimación comparativa, no certificación oficial.</p>
+      <div class="field mini-field"><label>Origen</label><input id="routeFrom" placeholder="Ej. Calle Alcalá 50, Madrid"></div>
+      <div class="field mini-field"><label>Destino</label><input id="routeTo" placeholder="Ej. Aeropuerto / dirección cliente"></div>
+      <div class="field mini-field"><label>Modo</label><select id="routeMode"><option value="car">Coche</option><option value="truck">Camión / flota</option><option value="bicycle">Bici</option><option value="pedestrian">Andando</option></select></div>
+      <div class="tool-row tool-grid-2">
+        <button class="btn primary" id="routeBtn">Optimizar ruta</button>
+        <button class="btn secondary" id="clearRouteBtn">Limpiar ruta</button>
+      </div>
+      <div class="route-info" id="routeInfo">Sin ruta calculada.</div>
+    </section>
+
+    <section class="card command-card azure-intel-card module-card" style="animation-delay:.30s">
+      <h3>Azure Intelligence</h3>
+      <p class="muted tiny">No vendemos Azure Maps: usamos Azure como motor geoespacial y pilot1 como capa operativa Momentum.</p>
+      <div class="tool-row tool-grid-2">
+        <button class="btn primary" id="advanced3dBtn" data-help-title="Vista 3D operativa" data-help-desc="Inclina el mapa, cambia el ángulo y prepara una vista más visual para presentación." data-help-actions="Pitch · bearing · presentación">▧ Vista 3D</button>
+        <button class="btn secondary" id="geofenceBtn" data-help-title="Zonas operativas" data-help-desc="Muestra zonas demo: centro, aeropuerto, rent-a-car, asistencia y corredor crítico." data-help-actions="Geofences · detección · prioridad">⬡ Zonas ON</button>
+      </div>
+      <div class="azure-intel-grid" id="azureIntelGrid">
+        <div><span>Motor</span><b>Azure Maps</b></div>
+        <div><span>Capa</span><b>Momentum pilot1</b></div>
+        <div><span>Tráfico</span><b id="azTrafficState">ON</b></div>
+        <div><span>Zonas</span><b id="azZoneCount">0</b></div>
+      </div>
+      <div class="route-info azure-intel-output" id="trafficIntel">Traffic Intelligence pendiente de análisis.</div>
+      <div class="route-info azure-intel-output" id="geofenceInfo">Zonas operativas listas para activar.</div>
+    </section>
+
+    <section class="card command-card v16-card module-card" style="animation-delay:.34s">
+      <h3>Capa privada V16</h3>
+      <p class="muted tiny">Carga una activación propia de baliza para verla como nodo diferenciado. Se guarda en este navegador.</p>
+      <div class="field mini-field"><label>IMEI / ID</label><input id="v16Imei" placeholder="Ej. 868xxxxxxxxxxxx"></div>
+      <div class="field mini-field"><label>Vehículo / cliente</label><input id="v16Vehicle" placeholder="Ej. Flota demo · vehículo 17"></div>
+      <div class="field mini-field"><label>Dirección o coordenadas</label><input id="v16Location" placeholder="Ej. Carrer de Malats 12, Barcelona"></div>
+      <div class="field mini-field"><label>Nota operativa</label><input id="v16Note" placeholder="Ej. Activación manual · asistencia pendiente"></div>
+      <div class="tool-row tool-grid-2">
+        <button class="btn primary" id="addV16Btn">Añadir V16</button>
+        <button class="btn secondary" id="demoV16Btn">Demo</button>
+        <button class="btn secondary" id="clearV16Btn">Borrar V16</button>
+        <button class="btn secondary" id="printBtn">PDF / imprimir</button>
+      </div>
+      <div class="measure-line" id="v16Info">0 activaciones privadas.</div>
+    </section>
+
+    <section class="card command-card module-card" style="animation-delay:.42s">
+      <h3>Informe operativo</h3>
+      <div id="report" class="report-box">Inicializando...</div>
+    </section>
+  </aside>
+
+  <aside class="right-panel">
+    <section class="card command-card module-card" style="animation-delay:.15s">
+      <h3>Panel de control</h3>
+      <div class="mini-grid kpi-grid">
+        <div class="mini"><span>Eventos</span><b id="kEvents">0</b></div>
+        <div class="mini"><span>Riesgo</span><b id="kRisk">BAJO</b></div>
+        <div class="mini"><span>Capas activas</span><b id="kLayers">0</b></div>
+        <div class="mini"><span>V16 privadas</span><b id="kV16">0</b></div>
+        <div class="mini"><span>Ciudad</span><b id="kCity">Madrid</b></div>
+        <div class="mini"><span>Estado</span><b id="kState">INIT</b></div>
+      </div>
+    </section>
+
+    <section class="card command-card module-card" style="animation-delay:.22s">
+      <h3>Evento seleccionado</h3>
+      <p id="detail" class="muted">Selecciona un punto del mapa para ver inteligencia detallada, enlaces externos y acciones rápidas.</p>
+    </section>
+
+    <section class="card command-card module-card" style="animation-delay:.30s">
+      <div class="card-title-row"><h3>Cola de eventos</h3><span class="queue-count" id="queueCount">0</span></div>
+      <div id="eventList" class="event-list"><p class="muted tiny">Carga capas para ver una cola priorizada de incidencias.</p></div>
+    </section>
+
+    <section class="card visual-card command-card module-card" style="animation-delay:.38s">
+      <h3>Inspección visual</h3>
+      <div id="viewerBox" class="viewer-box">
+        <div class="viewer-empty">Selecciona una imagen Mapillary para caminar por la ciudad.</div>
+      </div>
+      <p class="muted tiny">MapillaryJS permite navegar por imágenes cuando existe secuencia disponible.</p>
+    </section>
+
+    <section class="card command-card module-card" style="animation-delay:.46s">
+      <h3>Estado fuentes</h3>
+      <div id="sourceHealth" class="source-health"></div>
+      <p class="muted tiny" style="margin-top:8px">Tráfico urbano: Madrid/SCT. DGT: DATEX2. Mapillary: inspección visual street-level. OSM: infraestructura estática.</p>
+    </section>
+  </aside>
+
+  <section class="bottom-drawer">
+    <div class="mobile-actions">
+      <button data-tab="layers">Capas</button>
+      <button data-tab="report">Informe</button>
+      <button data-tab="detail">Detalle</button>
+      <button onclick="loadActive()">🔄 Cargar</button>
+    </div>
+    <div class="mobile-content" id="mobileContent"></div>
+  </section>
+</div>
+<div class="hover-intel hide" id="hoverIntel" aria-hidden="true"></div>
+<div class="toast" id="toast"></div>
+  <script src="assets/js/orbe.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

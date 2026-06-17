@@ -1,0 +1,571 @@
+/* ═══════════════════════════════════════════════════════════════
+   MOMENTUM SYSTEMS — ORBE OS v1.0
+   Sistema operativo gestual para pilot1
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Variables del Orbe ─── */
+:root {
+  --orbe-size: 120px;
+  --orbe-size-mob: 80px;
+  --orbe-ring1-radius: 70px;
+  --orbe-ring2-radius: 130px;
+  --orbe-color-primary: #00e5ff;
+  --orbe-color-secondary: #7c4dff;
+  --orbe-color-alert: #ff5252;
+  --orbe-color-warning: #ffd740;
+  --orbe-color-success: #69f0ae;
+  --orbe-color-friend: #ff9100;
+  --orbe-glow: 0 0 30px rgba(0, 229, 255, 0.4), 0 0 60px rgba(0, 229, 255, 0.15);
+  --orbe-glow-alert: 0 0 30px rgba(255, 82, 82, 0.5), 0 0 60px rgba(255, 82, 82, 0.2);
+  --orbe-transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ─── Contenedor principal del Orbe ─── */
+.orbe-container {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  z-index: 9999;
+  width: var(--orbe-size);
+  height: var(--orbe-size);
+  pointer-events: none;
+  user-select: none;
+}
+
+.orbe-container * {
+  pointer-events: auto;
+}
+
+/* ─── Núcleo del Orbe ─── */
+.orbe-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, 
+    rgba(255,255,255,0.15) 0%, 
+    rgba(0,229,255,0.1) 40%, 
+    rgba(0,0,0,0.4) 100%);
+  background-color: rgba(10, 15, 30, 0.9);
+  border: 2px solid rgba(0, 229, 255, 0.6);
+  box-shadow: var(--orbe-glow), inset 0 0 20px rgba(0,229,255,0.1);
+  cursor: pointer;
+  transition: var(--orbe-transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--orbe-color-primary);
+  text-shadow: 0 0 10px rgba(0,229,255,0.6);
+  z-index: 10;
+}
+
+.orbe-core:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 0 0 40px rgba(0,229,255,0.5), 0 0 80px rgba(0,229,255,0.2), inset 0 0 30px rgba(0,229,255,0.15);
+}
+
+.orbe-core.active {
+  background-color: rgba(0, 229, 255, 0.15);
+  border-color: var(--orbe-color-primary);
+  box-shadow: 0 0 50px rgba(0,229,255,0.6), 0 0 100px rgba(0,229,255,0.25), inset 0 0 40px rgba(0,229,255,0.2);
+}
+
+.orbe-core.alert {
+  border-color: var(--orbe-color-alert);
+  color: var(--orbe-color-alert);
+  text-shadow: 0 0 10px rgba(255,82,82,0.6);
+  box-shadow: var(--orbe-glow-alert);
+  animation: orbe-pulse-alert 2s ease-in-out infinite;
+}
+
+@keyframes orbe-pulse-alert {
+  0%, 100% { box-shadow: var(--orbe-glow-alert); }
+  50% { box-shadow: 0 0 50px rgba(255,82,82,0.7), 0 0 100px rgba(255,82,82,0.3); }
+}
+
+/* ─── Anillos del Orbe ─── */
+.orbe-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px dashed rgba(0, 229, 255, 0.25);
+  transition: var(--orbe-transition);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.orbe-ring.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.orbe-ring-1 {
+  width: calc(var(--orbe-size) + var(--orbe-ring1-radius) * 2);
+  height: calc(var(--orbe-size) + var(--orbe-ring1-radius) * 2);
+}
+
+.orbe-ring-2 {
+  width: calc(var(--orbe-size) + var(--orbe-ring2-radius) * 2);
+  height: calc(var(--orbe-size) + var(--orbe-ring2-radius) * 2);
+  border-style: dotted;
+  border-color: rgba(124, 77, 255, 0.2);
+}
+
+.orbe-ring.spin-slow {
+  animation: orbe-spin 20s linear infinite;
+}
+
+.orbe-ring.spin-fast {
+  animation: orbe-spin 8s linear infinite;
+}
+
+@keyframes orbe-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ─── Satélites (botones de órbita) ─── */
+.orbe-satellite {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(10, 15, 30, 0.95);
+  border: 1.5px solid rgba(0, 229, 255, 0.4);
+  color: var(--orbe-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  transition: var(--orbe-transition);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 15px rgba(0,229,255,0.1);
+  opacity: 0;
+  transform: scale(0) translate(-50%, -50%);
+  z-index: 5;
+}
+
+.orbe-satellite.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.orbe-satellite:hover {
+  transform: scale(1.2);
+  border-color: var(--orbe-color-primary);
+  box-shadow: 0 0 25px rgba(0,229,255,0.3), 0 4px 20px rgba(0,0,0,0.5);
+  background: rgba(0, 229, 255, 0.1);
+}
+
+.orbe-satellite.active {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: var(--orbe-color-primary);
+  box-shadow: 0 0 30px rgba(0,229,255,0.4);
+}
+
+.orbe-satellite .sat-label {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  background: rgba(0,0,0,0.7);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.orbe-satellite:hover .sat-label,
+.orbe-satellite.active .sat-label {
+  opacity: 1;
+}
+
+/* ─── Satélites de amigo (colaborador) ─── */
+.orbe-satellite.friend {
+  border-color: var(--orbe-color-friend);
+  color: var(--orbe-color-friend);
+  box-shadow: 0 0 15px rgba(255,145,0,0.2);
+}
+
+.orbe-satellite.friend:hover {
+  box-shadow: 0 0 25px rgba(255,145,0,0.4);
+  background: rgba(255, 145, 0, 0.1);
+}
+
+/* ─── Mini Orbe de colaborador en el mapa ─── */
+.mini-orbe {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 145, 0, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 20px rgba(255,145,0,0.5), 0 2px 10px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: white;
+  cursor: pointer;
+  z-index: 1000;
+  transition: var(--orbe-transition);
+  animation: mini-orbe-float 3s ease-in-out infinite;
+}
+
+.mini-orbe:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 30px rgba(255,145,0,0.7);
+}
+
+.mini-orbe .mini-ring {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255,145,0,0.3);
+  animation: orbe-spin 15s linear infinite;
+}
+
+@keyframes mini-orbe-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ─── Diálogos flotantes del Orbe ─── */
+.orbe-dialog {
+  position: fixed;
+  background: rgba(10, 15, 30, 0.97);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 16px;
+  padding: 20px;
+  min-width: 280px;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(0,229,255,0.1);
+  z-index: 10000;
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+  font-family: 'Inter', sans-serif;
+}
+
+.orbe-dialog.visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+.orbe-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.15);
+}
+
+.orbe-dialog-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--orbe-color-primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.orbe-dialog-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.orbe-dialog-close:hover {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+
+.orbe-dialog-body {
+  color: rgba(255,255,255,0.85);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.orbe-dialog-body p {
+  margin: 0 0 12px 0;
+}
+
+.orbe-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.orbe-dialog-btn {
+  flex: 1;
+  min-width: 100px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: rgba(0, 229, 255, 0.05);
+  color: var(--orbe-color-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.orbe-dialog-btn:hover {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: var(--orbe-color-primary);
+  transform: translateY(-1px);
+}
+
+.orbe-dialog-btn.primary {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: var(--orbe-color-primary);
+}
+
+.orbe-dialog-btn.primary:hover {
+  background: rgba(0, 229, 255, 0.3);
+}
+
+.orbe-dialog-btn.danger {
+  border-color: var(--orbe-color-alert);
+  color: var(--orbe-color-alert);
+  background: rgba(255, 82, 82, 0.05);
+}
+
+.orbe-dialog-btn.danger:hover {
+  background: rgba(255, 82, 82, 0.15);
+}
+
+/* ─── Lista de denuncias ─── */
+.orbe-denuncia-list {
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0 -4px;
+}
+
+.orbe-denuncia-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 4px 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.orbe-denuncia-item:hover {
+  background: rgba(0, 229, 255, 0.05);
+  border-color: rgba(0, 229, 255, 0.15);
+}
+
+.orbe-denuncia-item .den-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.orbe-denuncia-item .den-text {
+  flex: 1;
+}
+
+.orbe-denuncia-item .den-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 2px;
+}
+
+.orbe-denuncia-item .den-desc {
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+}
+
+/* ─── Panel de actividad del amigo ─── */
+.friend-activity-panel {
+  position: fixed;
+  top: 120px;
+  right: 380px;
+  width: 260px;
+  background: rgba(10, 15, 30, 0.95);
+  border: 1px solid rgba(255, 145, 0, 0.3);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4), 0 0 30px rgba(255,145,0,0.1);
+  z-index: 9998;
+  opacity: 0;
+  transform: translateX(20px);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: 'Inter', sans-serif;
+}
+
+.friend-activity-panel.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.friend-activity-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 145, 0, 0.15);
+}
+
+.friend-activity-header .friend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orbe-color-friend);
+  box-shadow: 0 0 8px var(--orbe-color-friend);
+  animation: friend-pulse 2s ease-in-out infinite;
+}
+
+@keyframes friend-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.friend-activity-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--orbe-color-friend);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.friend-activity-content {
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.5;
+}
+
+.friend-activity-content .activity-action {
+  color: var(--orbe-color-friend);
+  font-weight: 600;
+}
+
+/* ─── Toast del Orbe ─── */
+.orbe-toast {
+  position: fixed;
+  bottom: 170px;
+  right: 32px;
+  background: rgba(10, 15, 30, 0.95);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 12px;
+  padding: 12px 20px;
+  color: var(--orbe-color-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  z-index: 10001;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.orbe-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── Overlay para cerrar al clicar fuera ─── */
+.orbe-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.2);
+  z-index: 9998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.orbe-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .orbe-container {
+    bottom: 20px;
+    right: 20px;
+    width: var(--orbe-size-mob);
+    height: var(--orbe-size-mob);
+  }
+
+  .orbe-core {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .orbe-satellite {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .orbe-dialog {
+    left: 16px !important;
+    right: 16px !important;
+    min-width: auto;
+    max-width: none;
+  }
+
+  .friend-activity-panel {
+    right: 16px;
+    left: 16px;
+    width: auto;
+    top: auto;
+    bottom: 120px;
+  }
+}
+
+/* ─── Animaciones de entrada ─── */
+@keyframes orbe-pop-in {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.orbe-satellite.entering {
+  animation: orbe-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}

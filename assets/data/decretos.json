@@ -1,0 +1,154 @@
+{
+  "categorias": [
+    {
+      "id": "barrera_arquitectonica",
+      "nombre": "Barrera arquitectónica",
+      "icono": "🚧",
+      "decretos": [
+        {
+          "ref": "RD 314/2006",
+          "titulo": "Código Técnico de la Edificación",
+          "articulo": "DB-SUA Accesibilidad y supresión de barreras"
+        },
+        {
+          "ref": "LO 4/2015",
+          "titulo": "Ley de Procedimiento Administrativo",
+          "articulo": "Art. 55. Deber de colaboración ciudadana"
+        },
+        {
+          "ref": "Ley 39/2015",
+          "titulo": "Régimen Jurídico Administraciones Públicas",
+          "articulo": "Art. 37. Reclamaciones previas"
+        }
+      ],
+      "competencia": "Ayuntamiento / Área de Urbanismo y Accesibilidad",
+      "plazo_respuesta": "30 días hábiles",
+      "sancion": "Hasta 150.000€ según gravedad y reincidencia"
+    },
+    {
+      "id": "zona_no_inclusiva",
+      "nombre": "Zona pública no inclusiva",
+      "icono": "♿",
+      "decretos": [
+        {
+          "ref": "Ley 51/2003",
+          "titulo": "Igualdad de oportunidades, no discriminación y accesibilidad universal",
+          "articulo": "Art. 10. Accesibilidad del entorno físico"
+        },
+        {
+          "ref": "RD 1544/2007",
+          "titulo": "Subvenciones para accesibilidad",
+          "articulo": "Ordenanza de subvenciones municipales"
+        },
+        {
+          "ref": "Ley 7/2022",
+          "titulo": "Ley de residuos y suelos contaminados",
+          "articulo": "Art. 8. Espacios públicos limpios y accesibles"
+        }
+      ],
+      "competencia": "Ayuntamiento / Concejalía de Servicios Sociales",
+      "plazo_respuesta": "45 días hábiles",
+      "sancion": "Apercibimiento hasta 30.000€"
+    },
+    {
+      "id": "coche_acera",
+      "nombre": "Vehículo estacionado en acera",
+      "icono": "🚗",
+      "decretos": [
+        {
+          "ref": "Ley sobre Tráfico, Circulación de Vehículos a Motor y Seguridad Vial",
+          "titulo": "Ordenanza municipal de tráfico",
+          "articulo": "Art. 90. Prohibición estacionar en aceras"
+        },
+        {
+          "ref": "Ley 22/2003",
+          "titulo": "Coactivo de la seguridad vial",
+          "articulo": "Art. 65. Infracciones graves"
+        },
+        {
+          "ref": "RD 965/2006",
+          "titulo": "Reglamento General de Circulación",
+          "articulo": "Art. 91. Estacionamiento"
+        }
+      ],
+      "competencia": "Policía Local / Área de Movilidad",
+      "plazo_respuesta": "Inmediato (grúa) o 15 días para recurso",
+      "sancion": "200€ a 500€ + coste grúa"
+    },
+    {
+      "id": "obstaculo_via_publica",
+      "nombre": "Obstáculo en vía pública",
+      "icono": "🛑",
+      "decretos": [
+        {
+          "ref": "Ley 39/2015",
+          "titulo": "Régimen Jurídico Administraciones Públicas",
+          "articulo": "Art. 102. Ocupación vía pública"
+        },
+        {
+          "ref": "Ley 7/1985",
+          "titulo": "Bases de Régimen Local",
+          "articulo": "Art. 25. Ordenanza de limpieza"
+        },
+        {
+          "ref": "RD 1428/2003",
+          "titulo": "Reglamento de espectáculos",
+          "articulo": "Art. 12. Ocupación temporal"
+        }
+      ],
+      "competencia": "Ayuntamiento / Policía Local",
+      "plazo_respuesta": "24-48 horas",
+      "sancion": "300€ a 3.000€"
+    },
+    {
+      "id": "falta_iluminacion",
+      "nombre": "Falta de iluminación / luminaria averiada",
+      "icono": "💡",
+      "decretos": [
+        {
+          "ref": "RD 1890/2008",
+          "titulo": "Eficiencia energética en alumbrado público",
+          "articulo": "Art. 6. Mantenimiento obligatorio"
+        },
+        {
+          "ref": "Ley 24/2013",
+          "titulo": "Sector eléctrico",
+          "articulo": "Art. 45. Servicio público"
+        },
+        {
+          "ref": "Ordenanza municipal",
+          "titulo": "Alumbrado público",
+          "articulo": "Art. 4. Reclamaciones vecinales"
+        }
+      ],
+      "competencia": "Ayuntamiento / Empresa concesionaria alumbrado",
+      "plazo_respuesta": "72 horas",
+      "sancion": "No aplica (servicio público)"
+    },
+    {
+      "id": "bache_calzada",
+      "nombre": "Bache o deterioro de calzada",
+      "icono": "🕳️",
+      "decretos": [
+        {
+          "ref": "Ley 33/2015",
+          "titulo": "Patrimonio público local",
+          "articulo": "Art. 12. Conservación"
+        },
+        {
+          "ref": "RD 773/1997",
+          "titulo": "Carreteras",
+          "articulo": "Art. 48. Conservación"
+        },
+        {
+          "ref": "Ordenanza municipal",
+          "titulo": "Conservación vías",
+          "articulo": "Art. 8. Reclamaciones"
+        }
+      ],
+      "competencia": "Ayuntamiento / Área de Obras",
+      "plazo_respuesta": "15-30 días según gravedad",
+      "sancion": "No aplica (reparación obligatoria)"
+    }
+  ]
+}
