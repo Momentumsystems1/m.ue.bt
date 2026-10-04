@@ -54,7 +54,7 @@ export default function BottomDock({
       {/* Diagnostic Stream */}
       <div className="w-[35%] border-r border-cyan-500/20 flex flex-col">
         <div className="section-head">
-          <span>DIAGNOSTIC STREAM</span>
+          <span>REGISTRO EN VIVO</span>
           <div className="flex items-center gap-1.5"><div className="live-dot" /><span className="text-cyan-300/60">RT</span></div>
         </div>
         <div className="flex-1 overflow-hidden relative bg-grid">
@@ -68,7 +68,7 @@ export default function BottomDock({
       {/* Tactical Table */}
       <div className="flex-1 border-r border-cyan-500/20 flex flex-col">
         <div className="section-head">
-          <span>EVENT SUBSET · TACTICAL TABLE</span>
+          <span>EVENT SUBSET · TABLA DE EVENTOS</span>
           <span className="text-cyan-300/60">FREQ 1.000Hz</span>
         </div>
         <div className="flex-1 overflow-hidden bg-stripes">
@@ -91,7 +91,7 @@ export default function BottomDock({
       {/* Telemetry */}
       <div className="w-[22%] flex flex-col">
         <div className="section-head">
-          <span>TELEMETRY</span>
+          <span>TELEMETRÍA</span>
           <span className="text-cyan-300/60">v2.0</span>
         </div>
         <div className="flex-1 px-3 py-2 font-mono text-[10px] space-y-1.5">

@@ -13,6 +13,19 @@ module.exports = {
         sm: 'calc(var(--radius) - 4px)'
       },
       colors: {
+        // MY CLUSTER rebrand: toda la UI usa clases cyan-* heredadas del tema HUD;
+        // aquí cyan se remapea a la escala roja corporativa (#EA4335) para que
+        // el centro de mando case con la app sin tocar cientos de clases.
+        blue: {
+          50: '#FEF3F2', 100: '#FDE4E1', 200: '#FBC9C4', 300: '#F6A097',
+          400: '#F06A5E', 500: '#EA4335', 600: '#D93025', 700: '#B3261E',
+          800: '#8C1D18', 900: '#66150F', 950: '#3B0D0A'
+        },
+        cyan: {
+          50: '#FEF3F2', 100: '#FDE4E1', 200: '#FBC9C4', 300: '#F6A097',
+          400: '#F06A5E', 500: '#EA4335', 600: '#D93025', 700: '#B3261E',
+          800: '#8C1D18', 900: '#66150F', 950: '#3B0D0A'
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {

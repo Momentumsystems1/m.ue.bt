@@ -40,20 +40,20 @@ export const SEV_COLOR = {
 };
 
 export const SUBROUTINES = [
-  ["GTF-001", "DATEX2 STREAM",        "ACTIVE"],
-  ["GTF-002", "SCT FEED",             "ACTIVE"],
-  ["GTF-003", "MADRID KML",           "ACTIVE"],
-  ["GTF-004", "OSM OVERPASS",         "STANDBY"],
-  ["GTF-005", "NOMINATIM GEOCODE",    "STANDBY"],
-  ["GTF-006", "MAPTILE RASTER",       "ACTIVE"],
-  ["GTF-007", "TERRAIN RGB",          "STANDBY"],
-  ["GTF-008", "EVENT CLASSIFIER",     "ACTIVE"],
-  ["GTF-009", "SEVERITY MATRIX",      "ACTIVE"],
-  ["GTF-010", "GEOSPATIAL FILTER",    "ACTIVE"],
-  ["GTF-011", "PARKING AGGREGATOR",   "STANDBY"],
-  ["GTF-012", "ROUTE OPTIMIZER",      "ACTIVE"],
-  ["GTF-013", "DENSITY HEATMAP",      "STANDBY"],
-  ["GTF-014", "EXPORT ENGINE",        "ACTIVE"],
+  ["F-01", "DGT · DATEX2 EN VIVO",   "ACTIVO"],
+  ["F-02", "SCT CATALUNYA",          "ACTIVO"],
+  ["F-03", "MADRID ABIERTO",         "ACTIVO"],
+  ["F-04", "PARKING OSM",            "ESPERA"],
+  ["F-05", "GEOCODIFICACIÓN",        "ESPERA"],
+  ["F-06", "MAPA BASE",              "ACTIVO"],
+  ["F-07", "TERRENO 3D",             "ESPERA"],
+  ["F-08", "CLASIFICADOR",           "ACTIVO"],
+  ["F-09", "MATRIZ DE GRAVEDAD",     "ACTIVO"],
+  ["F-10", "FILTRO GEOGRÁFICO",      "ACTIVO"],
+  ["F-11", "AGREGADOR PARKING",      "ESPERA"],
+  ["F-12", "OPTIMIZADOR DE RUTA",    "ACTIVO"],
+  ["F-13", "MAPA DE DENSIDAD",       "ESPERA"],
+  ["F-14", "EXPORTACIÓN PDF",        "ACTIVO"],
 ];
 
 export const fmtTime = (d) => {

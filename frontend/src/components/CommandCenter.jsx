@@ -17,6 +17,9 @@ import BottomDock from "@/components/BottomDock";
 import { AzureToolbar, WeatherChip, EVPanel } from "@/components/AzureStack";
 import MobilityHub from "@/components/MobilityHub";
 import RadialCommand from "@/components/RadialCommand";
+import MyClusterPanel from "@/components/MyClusterPanel";
+import { fetchGroup, fetchPositions, fetchMeetings, fetchZones, fetchTodayTrail, summarizeTrail } from "@/lib/mycluster";
+import { samplePositions, SAMPLE_ZONES, SAMPLE_MEETINGS, SAMPLE_CO2 } from "@/lib/sampleFleet";
 import jsPDF from "jspdf";
 
 export default function CommandCenter() {
@@ -100,6 +103,16 @@ export default function CommandCenter() {
   const [pickingTarget, setPickingTarget] = useState(null);      // origin | destination | null
   const [sideEntries, setSideEntries] = useState([]);
   const [radialProfile, setRadialProfile] = useState(null);           // right-edge contextual cards
+
+  // ===== MY CLUSTER state (equipo, CO₂, cercas, quedadas) =====
+  const [mycSession, setMycSession] = useState(null);   // objeto sesión real | "sample" | null
+  const [mycGroup, setMycGroup] = useState(null);
+  const [mycPositions, setMycPositions] = useState([]);
+  const [mycMeetings, setMycMeetings] = useState([]);
+  const [mycZones, setMycZones] = useState([]);
+  const [mycCo2, setMycCo2] = useState(null);
+  const mycGroupRef = useRef(null);
+  const mycMarkersRef = useRef([]);
 
   const pushSideEntry = useCallback((entry) => {
     setSideEntries((arr) => {
@@ -802,7 +815,7 @@ export default function CommandCenter() {
       el.style.boxShadow = "0 8px 22px rgba(37,99,235,.24)";
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([lon, lat])
-        .setPopup(new maplibregl.Popup({ offset: 18 }).setHTML(`<div style="font:600 12px system-ui;color:#0f172a">${label}</div><div style="font:12px system-ui;color:#475569">Punto cercano demo</div>`))
+        .setPopup(new maplibregl.Popup({ offset: 18 }).setHTML(`<div style="font:600 12px system-ui;color:#0f172a">${label}</div><div style="font:12px system-ui;color:#475569">Punto cercano</div>`))
         .addTo(map);
       map[markerKey].push(marker);
     });
@@ -1396,9 +1409,9 @@ export default function CommandCenter() {
     doc.rect(0, 0, W, 90, "[ ESPERANDO DATOS ]");
     doc.setTextColor(34, 211, 238);
     doc.setFont("courier", "bold").setFontSize(18);
-    doc.text("MOMENTUM ROAD COMMAND CENTER", 40, 38);
+    doc.text("MY CLUSTER ROAD COMMAND CENTER", 40, 38);
     doc.setFont("courier", "normal").setFontSize(9);
-    doc.text("PEGASUS · GATE DIAGNOSTICS · TACTICAL REPORT", 40, 56);
+    doc.text("MY CLUSTER · CENTRO DE MANDO · INFORME DE TRÁFICO", 40, 56);
     doc.setTextColor(125, 211, 252);
     doc.text(`SECTOR: ${(eventsData.city || "—").toUpperCase()}    GENERATED: ${new Date().toISOString().replace("[ SIN INCIDENCIAS EN EL SECTOR ]", "[ SIN INCIDENCIAS EN EL SECTOR ]").slice(0, 19)} UTC`, 40, 74);
 
@@ -1535,8 +1548,18 @@ export default function CommandCenter() {
     });
   };
 
-  const handleRadialBootstrap = async ({ name, locationQuery, useGeolocation }) => {
+  const handleRadialBootstrap = async ({ name, locationQuery, useGeolocation, session }) => {
     setRadialProfile({ name: name || "Visitor", locationQuery, useGeolocation });
+    if (session) setMycSession(session);
+    // Datos de ejemplo: sin backend de geocodificación, centramos la flota de Madrid directamente
+    if (session === "sample") {
+      const mad = [-3.7038, 40.4168];
+      userTouchedMapRef.current = true;
+      setMapCenter({ lat: mad[1], lng: mad[0] });
+      setUserLocationLabel("Madrid Centro");
+      setTimeout(() => mapRef.current?.flyTo({ center: mad, zoom: 13.2, duration: 1400 }), 600);
+      return;
+    }
     setMapStyle("light");
     setExpertMode(false);
     pushSideEntry({
@@ -1634,6 +1657,112 @@ export default function CommandCenter() {
       addLog(`[RADIAL] Geocode falló: ${e.message}`, "err");
     }
   };
+
+  // ===== MY CLUSTER: sondeo del equipo (real vía sentinel-api | datos de ejemplo) =====
+  useEffect(() => {
+    if (!mycSession) return undefined;
+    let alive = true;
+    let timer = null;
+    const sample = mycSession === "sample";
+    const tick = async () => {
+      try {
+        if (sample) {
+          if (alive) {
+            setMycPositions(samplePositions(Date.now() / 4000));
+            setMycMeetings(SAMPLE_MEETINGS);
+            setMycZones(SAMPLE_ZONES);
+            setMycCo2(SAMPLE_CO2);
+          }
+        } else {
+          let gid = mycGroupRef.current;
+          if (!gid) {
+            const g = await fetchGroup(mycSession.token);
+            gid = g?.id || null;
+            mycGroupRef.current = gid;
+            if (alive) setMycGroup(g);
+            if (!gid) throw new Error("sin grupo");
+          }
+          const [pos, meet] = await Promise.all([
+            fetchPositions(mycSession.token, gid).catch(() => []),
+            fetchMeetings(mycSession.token, gid).catch(() => []),
+          ]);
+          if (!alive) return;
+          setMycPositions(Array.isArray(pos) ? pos : pos?.positions || pos?.members || []);
+          setMycMeetings(Array.isArray(meet) ? meet : []);
+          fetchZones(mycSession.token, gid).then((z) => alive && setMycZones(Array.isArray(z) ? z : [])).catch(() => {});
+          fetchTodayTrail(mycSession.token, gid).then((rows) => alive && setMycCo2(summarizeTrail(rows))).catch(() => {});
+        }
+      } catch {
+        /* sin grupo o red caída: se reintenta en el próximo ciclo */
+      } finally {
+        if (alive) timer = setTimeout(tick, sample ? 4000 : 15000);
+      }
+    };
+    tick();
+    return () => { alive = false; if (timer) clearTimeout(timer); };
+  }, [mycSession]);
+
+  // ===== MY CLUSTER: marcadores de equipo + quedadas + cercas sobre el mapa =====
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getCanvas || !map.getCanvas() || !mycSession) return;
+
+    // Cercas como polígonos circulares GeoJSON
+    const circle = (lng, lat, radiusM, steps = 64) => {
+      const pts = [];
+      const dLat = radiusM / 111320;
+      const dLng = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+      for (let i = 0; i <= steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        pts.push([lng + Math.cos(a) * dLng, lat + Math.sin(a) * dLat]);
+      }
+      return pts;
+    };
+    const zonesGeo = {
+      type: "FeatureCollection",
+      features: (mycZones || [])
+        .filter((z) => z.lat != null && z.lng != null)
+        .map((z) => ({
+          type: "Feature",
+          properties: { name: z.name || "Cerca" },
+          geometry: { type: "Polygon", coordinates: [circle(z.lng, z.lat, z.radius_m || z.radius || 200)] },
+        })),
+    };
+    if (map.isStyleLoaded && map.isStyleLoaded()) {
+      if (!map.getSource("myc-zones")) {
+        map.addSource("myc-zones", { type: "geojson", data: zonesGeo });
+        map.addLayer({ id: "myc-zones-fill", type: "fill", source: "myc-zones", paint: { "fill-color": "#EA4335", "fill-opacity": 0.12 } });
+        map.addLayer({ id: "myc-zones-line", type: "line", source: "myc-zones", paint: { "line-color": "#EA4335", "line-opacity": 0.8, "line-width": 2.5, "line-dasharray": [2, 2] } });
+      }
+      const src = map.getSource("myc-zones");
+      if (src) src.setData(zonesGeo);
+    }
+
+    // Marcadores DOM: miembros (círculo con iniciales) + quedadas (pin)
+    mycMarkersRef.current.forEach((m) => m.remove());
+    mycMarkersRef.current = [];
+    (mycPositions || []).forEach((p) => {
+      if (p.lat == null || p.lng == null) return;
+      const el = document.createElement("div");
+      const color = p.color || "#EA4335";
+      const ini = (p.name || "·").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+      el.style.cssText = `width:30px;height:30px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,.35);display:grid;place-items:center;color:#fff;font:700 11px 'Plus Jakarta Sans',sans-serif;cursor:pointer;`;
+      el.textContent = ini;
+      el.title = p.name || "Miembro";
+      mycMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([p.lng, p.lat]).addTo(map));
+    });
+    (mycMeetings || []).forEach((mt) => {
+      if (mt.lat == null || mt.lng == null) return;
+      const el = document.createElement("div");
+      el.style.cssText = "width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#141518;border:2px solid #EA4335;box-shadow:0 4px 14px rgba(0,0,0,.4);display:grid;place-items:center;cursor:pointer;";
+      const inner = document.createElement("div");
+      inner.style.cssText = "transform:rotate(45deg);color:#EA4335;font:700 12px 'Plus Jakarta Sans',sans-serif;";
+      inner.textContent = "★";
+      el.appendChild(inner);
+      el.title = mt.name || "Quedada";
+      mycMarkersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([mt.lng, mt.lat]).addTo(map));
+    });
+  }, [mapReady, mycSession, mycPositions, mycMeetings, mycZones, radialProfile]);
 
   const handleRouteOption = (item) => {
     if (!item?.id) return;
@@ -1803,17 +1932,17 @@ export default function CommandCenter() {
               <Hexagon className="w-4 h-4 text-cyan-300" />
             </div>
             <div className="leading-none">
-              <div className="font-display font-semibold text-[16px] tracking-[0.18em] text-cyan-100">MOMENTUM</div>
-              <div className="font-mono text-[10px] tracking-[0.32em] text-cyan-400/70 mt-1">PEGASUS · ROAD COMMAND</div>
+              <div className="font-display font-semibold text-[16px] tracking-[0.18em] text-cyan-100">MY CLUSTER</div>
+              <div className="font-mono text-[10px] tracking-[0.32em] text-cyan-400/70 mt-1">CENTRO DE MANDO</div>
             </div>
           </div>
 
           {/* Title row */}
           <div className="flex-1 px-5 py-2.5 border-r border-cyan-500/20">
             <div className="flex items-center gap-3">
-              <div className="font-mono text-[10px] tracking-[0.28em] text-cyan-300/80">GATE DIAGNOSTICS · TRAFFIC SUBSYSTEM</div>
+              <div className="font-mono text-[10px] tracking-[0.28em] text-cyan-300/80">MOVILIDAD EN TIEMPO REAL</div>
               <div className="h-3 w-px bg-cyan-500/30" />
-              <div className="font-mono text-[10px] tracking-[0.22em] text-cyan-200">SUBSYSTEM ANALYSIS · ALPHA V.2</div>
+              <div className="font-mono text-[10px] tracking-[0.22em] text-cyan-200">DGT · SCT · MADRID · DIRECTO</div>
             </div>
             <div className="flex items-center gap-2 mt-2">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/5 border border-cyan-500/25 flex-1 max-w-2xl">
@@ -1823,7 +1952,7 @@ export default function CommandCenter() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="BÚSQUEDA: dirección, carretera, punto operativo"
+                  placeholder="Buscar dirección, carretera o punto de interés"
                   className="bg-transparent outline-none text-xs font-mono flex-1 placeholder:text-cyan-700/70 text-cyan-100"
                 />
                 <button data-testid="search-go-btn" onClick={handleSearch}
@@ -2054,7 +2183,7 @@ export default function CommandCenter() {
           <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">SECTOR {(cities.find((c) => c.id === city)?.name || city).toUpperCase()} · LIVE</div>
           <div className="flex gap-6">
             <div>
-              <div className="font-mono text-[8px] tracking-[0.22em] text-cyan-500/80">SITREC</div>
+              <div className="font-mono text-[8px] tracking-[0.22em] text-cyan-500/80">EVENTOS</div>
               <div className="font-mono text-3xl text-cyan-100 tabular-nums">{pad(eventsData.count)}</div>
             </div>
             <div>
@@ -2074,23 +2203,23 @@ export default function CommandCenter() {
         className={`absolute left-3 top-[150px] bottom-[200px] w-[340px] z-40 panel brackets flex-col anim-fade-up ${focusMode ? "hidden" : "hidden lg:flex"}`}
         data-testid="left-panel"
       >
-        <div className="section-head"><span>SUBSYSTEM ANALYSIS · ALPHA V.2</span><span className="text-cyan-300/60">{pad(kpi.count)}</span></div>
+        <div className="section-head"><span>DGT · SCT · MADRID · DIRECTO</span><span className="text-cyan-300/60">{pad(kpi.count)}</span></div>
 
         {/* KPI grid (Atlantis style: numeric heavy) */}
         <div className="grid grid-cols-3 border-b border-cyan-500/15" data-testid="kpi-grid">
-          <KPI label="SITREC" value={pad(kpi.count)} accent="text-cyan-100" />
-          <KPI label="RISK" value={kpi.risk} accent={riskColor(kpi.risk)} />
-          <KPI label="LAYER" value={STYLES[mapStyle].label.toUpperCase()} accent="text-cyan-200" small />
-          <KPI label="CRIT" value={pad(kpi.critical, 3)} accent="text-red-400" small />
-          <KPI label="WARN" value={pad(kpi.warning, 3)} accent="text-amber-400" small />
+          <KPI label="EVENTOS" value={pad(kpi.count)} accent="text-cyan-100" />
+          <KPI label="RIESGO" value={kpi.risk} accent={riskColor(kpi.risk)} />
+          <KPI label="CAPA" value={STYLES[mapStyle].label.toUpperCase()} accent="text-cyan-200" small />
+          <KPI label="CRÍT" value={pad(kpi.critical, 3)} accent="text-red-400" small />
+          <KPI label="AVISO" value={pad(kpi.warning, 3)} accent="text-amber-400" small />
           <KPI label="INFO" value={pad(kpi.info, 3)} accent="text-cyan-200" small last />
         </div>
 
         {/* Distribution */}
         <div className="px-3 py-2.5 border-b border-cyan-500/15">
-          <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">EVENT MATRIX · DISTRIBUTION</div>
+          <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">DISTRIBUCIÓN DE EVENTOS</div>
           <div className="space-y-1.5">
-            {kinds.length === 0 && <div className="text-[10px] text-cyan-700 font-mono">[ AWAITING DATAFEED ]</div>}
+            {kinds.length === 0 && <div className="text-[10px] text-cyan-700 font-mono">[ ESPERANDO DATOS ]</div>}
             {kinds.map(([k, n]) => {
               const Icon = KIND_ICON[k] || Radio;
               return (
@@ -2109,7 +2238,7 @@ export default function CommandCenter() {
 
         {/* Event Queue */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="section-head"><span>SITUATION RECORD QUEUE</span><span className="text-cyan-300/60">{pad(filteredFeatures.length)}</span></div>
+          <div className="section-head"><span>REGISTRO DE EVENTOS</span><span className="text-cyan-300/60">{pad(filteredFeatures.length)}</span></div>
           <div className="flex-1 overflow-y-auto" data-testid="event-queue">
             {loading && (
               <div className="flex items-center justify-center py-8 text-cyan-500/70 text-[11px] gap-2 font-mono">
@@ -2153,7 +2282,7 @@ export default function CommandCenter() {
 
               {/* Chevron diagnostics like atlantis */}
               <div className="px-3 py-3 border-b border-cyan-500/15">
-                <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">CHEVRON ANALYSIS</div>
+                <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">ANÁLISIS POR SECTORES</div>
                 <div className="grid grid-cols-9 gap-1">
                   {Array.from({ length: 36 }).map((_, i) => {
                     const active = (i + (eventsData?.count || 0)) % 3 !== 0;
@@ -2172,7 +2301,7 @@ export default function CommandCenter() {
 
               {/* Subroutines list */}
               <div className="px-3 py-3 border-b border-cyan-500/15">
-                <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">PRIMARY GTF SUBROUTINES</div>
+                <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">FUENTES DE DATOS PRINCIPALES</div>
                 <div className="space-y-0.5">
                   {SUBROUTINES.map((s) => (
                     <div key={s[0]} className="flex items-center justify-between font-mono text-[10px] tracking-wider atlantis-row px-1 py-0.5">
@@ -2180,8 +2309,8 @@ export default function CommandCenter() {
                         <span className="text-cyan-700">{s[0]}</span>
                         <span className="text-cyan-200">{s[1]}</span>
                       </div>
-                      <span className={`text-[9px] tracking-wider ${s[2] === "ACTIVE" ? "text-emerald-400" : s[2] === "STANDBY" ? "text-cyan-500" : "text-zinc-600"}`}>
-                        {s[2] === "ACTIVE" ? "● ACTIVE" : s[2] === "STANDBY" ? "○ STANDBY" : "× OFFLINE"}
+                      <span className={`text-[9px] tracking-wider ${s[2] === "ACTIVO" ? "text-emerald-400" : s[2] === "ESPERA" ? "text-cyan-500" : "text-zinc-600"}`}>
+                        {s[2] === "ACTIVO" ? "● ACTIVO" : s[2] === "ESPERA" ? "○ ESPERA" : "× INACTIVO"}
                       </span>
                     </div>
                   ))}
@@ -2190,7 +2319,7 @@ export default function CommandCenter() {
 
               {/* Source health */}
               <div className="px-3 py-3">
-                <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">DATA FEED STATUS</div>
+                <div className="font-mono text-[9px] tracking-[0.22em] text-cyan-500/80 mb-2">ESTADO DE FUENTES</div>
                 <SourceBadge name="DGT 3.0 · DATEX2 v36" status={healthData?.sources?.["DGT 3.0"]} />
                 <SourceBadge name="SCT · Catalunya GML" status={healthData?.sources?.SCT} />
                 <SourceBadge name="MADRID · Open KML" status={healthData?.sources?.Madrid} />
@@ -2237,7 +2366,7 @@ export default function CommandCenter() {
             <span>RANGE {eventsData?.radius_km || 150}KM</span>
             <span>{mapCenter.lat.toFixed(4)}, {mapCenter.lng.toFixed(4)}</span>
             <span className="text-cyan-300">{fmtTime(clock)} UTC</span>
-            <span className="text-cyan-300">MOMENTUM · ROAD · COMMAND · v2.0</span>
+            <span className="text-cyan-300">MY CLUSTER · ROAD · COMMAND · v2.0</span>
           </div>
         </div>
       </footer>
@@ -2267,10 +2396,10 @@ export default function CommandCenter() {
         </div>
       )}
 
-      {/* ===== CONNECTED SYSTEMS · radial mode diagnostic strip ===== */}
+      {/* ===== CONNECTED SYSTEMS · radial mode diagnostic strip (solo escritorio) ===== */}
       {!expertMode && (
         <div
-          className="glass-liquid absolute left-4 right-4 bottom-4 z-50 rounded-[22px] px-3 py-2"
+          className="glass-liquid absolute left-4 right-4 bottom-4 z-50 rounded-[22px] px-3 py-2 hidden md:block"
           data-testid="system-status-dock"
         >
           <div className="mb-1 flex items-center justify-between gap-3 px-1">
@@ -2433,7 +2562,7 @@ export default function CommandCenter() {
       {!expertMode && radialProfile && (
         <div className="absolute top-4 left-4 z-40 panel px-3 py-2 flex items-center gap-3 pointer-events-none" data-testid="radial-status-chip">
           <div className="live-dot" />
-          <div className="font-mono text-[10px] tracking-[0.22em] text-cyan-300">MOMENTUM · {clock.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</div>
+          <div className="font-mono text-[10px] tracking-[0.22em] text-cyan-300">MY CLUSTER · {clock.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</div>
           <div className="text-cyan-500/40">|</div>
           <div className="font-mono text-[10px] tracking-wide text-cyan-200">
             {radialSel.layer.toUpperCase()} · {radialSel.mode.toUpperCase()} · {radialSel.action.toUpperCase()}
@@ -2441,6 +2570,19 @@ export default function CommandCenter() {
           {radialOrigin && <span className="font-mono text-[10px] text-emerald-300">· ORG</span>}
           {radialDest && <span className="font-mono text-[10px] text-amber-300">· DST</span>}
         </div>
+      )}
+
+      {/* MY CLUSTER: equipo en vivo, CO₂, cercas y quedadas (modo simple) */}
+      {!expertMode && radialProfile && mycSession && (
+        <MyClusterPanel
+          session={mycSession}
+          positions={mycPositions}
+          meetings={mycMeetings}
+          zones={mycZones}
+          co2={mycCo2}
+          groupName={mycGroup?.name || ""}
+          onFlyTo={(lng, lat) => mapRef.current?.flyTo({ center: [lng, lat], zoom: 15.5, duration: 900 })}
+        />
       )}
 
       {/* Top-right corner: toggle expert HUD + cycle map style */}

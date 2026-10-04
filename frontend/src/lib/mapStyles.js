@@ -13,13 +13,11 @@ export const STYLE_NORMAL = {
     "carto-dark": {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+        "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
       ],
       tileSize: 256,
-      attribution: '© OpenStreetMap, © CARTO',
-      maxzoom: 19,
+      attribution: '© OpenStreetMap, © Esri',
+      maxzoom: 16,
     },
   },
   layers: [
@@ -37,19 +35,16 @@ export const STYLE_LIGHT = {
     "carto-light": {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+        "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
       ],
       tileSize: 256,
-      attribution: "© OpenStreetMap, © CARTO",
-      maxzoom: 19,
+      attribution: "© OpenStreetMap, © Esri",
+      maxzoom: 16,
     },
   },
   layers: [
     { id: "bg", type: "background", paint: { "background-color": "#eef5ff" } },
-    { id: "carto-light", type: "raster", source: "carto-light", paint: { "raster-saturation": 0.10, "raster-contrast": 0.20, "raster-brightness-min": 0.04, "raster-brightness-max": 1.0 } },
-    { id: "premium-blue-wash", type: "background", paint: { "background-color": "rgba(239,246,255,0.10)" } },
+    { id: "carto-light", type: "raster", source: "carto-light" },
   ],
 };
 
@@ -92,13 +87,11 @@ export const STYLE_3D = {
     "carto-dark": {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+        "https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
       ],
       tileSize: 256,
-      maxzoom: 19,
-      attribution: "© OpenStreetMap, © CARTO",
+      maxzoom: 16,
+      attribution: "© OpenStreetMap contributors",
     },
     "terrain-rgb": {
       type: "raster-dem",

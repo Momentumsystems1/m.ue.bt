@@ -1,11 +1,12 @@
 import React, { useMemo, useRef, useState } from "react";
+import { login as mcLogin } from "@/lib/mycluster";
 import {
   Route, Layers, Compass, ParkingCircle, Utensils, Bike, Zap,
   AlertTriangle, CloudRain, Satellite, Accessibility, Crosshair,
   X, Plus, Trash2, LocateFixed, ArrowLeft, Flag, MapPin,
 } from "lucide-react";
 
-const BLUE = "#1a73e8";
+const BLUE = "#EA4335"; // acento MY CLUSTER
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const viewport = () => ({ w: typeof window !== "undefined" ? window.innerWidth : 1440, h: typeof window !== "undefined" ? window.innerHeight : 900 });
 const screenCenter = () => { const s = viewport(); return { x: s.w / 2, y: s.h / 2 }; };
@@ -218,6 +219,11 @@ export default function RadialCommand({
   const [bootStage, setBootStage] = useState("auth");
   const [name, setName] = useState("Visitor");
   const [manualLocation, setManualLocation] = useState("Barcelona");
+  const [mcEmail, setMcEmail] = useState("");
+  const [mcPw, setMcPw] = useState("");
+  const [mcBusy, setMcBusy] = useState(false);
+  const [mcError, setMcError] = useState("");
+  const [mcSession, setMcSession] = useState(null);
   const [ready, setReady] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [activeMode, setActiveMode] = useState("main");
@@ -255,10 +261,33 @@ export default function RadialCommand({
   const orbitRotation = activeMode === "main" ? 0 : activeMode === "nearby" ? 72 : 144;
 
   const complete = (useGeolocation) => {
-    const payload = { name: name || "Visitor", locationQuery: manualLocation || "Barcelona", useGeolocation };
+    const payload = { name: name || "Visitor", locationQuery: manualLocation || "Barcelona", useGeolocation, session: mcSession };
     setReady(true); setExpanded(false); setBootStage("ready");
     const c = screenCenter(); setPosition({ x: c.x + 140, y: c.y - 20 });
     onBootstrapComplete && onBootstrapComplete(payload);
+  };
+
+  const doLogin = async () => {
+    if (mcBusy) return;
+    setMcError("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mcEmail.trim())) { setMcError("Introduce un email válido."); return; }
+    if (!mcPw) { setMcError("Introduce tu contraseña."); return; }
+    setMcBusy(true);
+    try {
+      const s = await mcLogin(mcEmail.trim().toLowerCase(), mcPw);
+      setMcSession(s);
+      setName(s.name || "Usuario");
+      setBootStage("profile");
+    } catch (e) {
+      setMcError(/credencial|credential|invalid|401/i.test(String(e?.message)) ? "Email o contraseña incorrectos." : "No se pudo conectar. Inténtalo de nuevo.");
+    } finally { setMcBusy(false); }
+  };
+
+  const enterSample = () => {
+    setMcSession("sample");
+    setName("Invitado");
+    setManualLocation("Madrid Centro");
+    setBootStage("profile");
   };
 
   const startDrag = (e) => {
@@ -304,17 +333,22 @@ export default function RadialCommand({
   if (!ready) {
     return (
       <div className="fixed inset-0 z-[100000] flex items-center justify-center pointer-events-none">
-        <div className="glass-liquid relative flex h-[330px] w-[330px] flex-col items-center justify-center rounded-full p-8 text-center pointer-events-auto" data-testid="orb-login">
+        <div className="glass-liquid relative flex flex-col items-center justify-center rounded-full p-8 text-center pointer-events-auto" data-testid="orb-login" style={{ width: bootStage === "auth" ? 400 : 330, height: bootStage === "auth" ? 400 : 330 }}>
           {bootStage === "auth" ? <>
-            <div className="text-[11px] font-bold uppercase tracking-[.28em] text-blue-600">Momentum</div><div className="mt-2 text-[30px] font-semibold tracking-tight text-slate-950">ORBEOS</div><div className="mt-2 max-w-[220px] text-[13px] text-slate-600">Acceso demo para probar navegación operativa.</div>
-            <div className="mt-6 grid w-full grid-cols-2 gap-2"><button type="button" onClick={() => { setName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-blue-200 bg-white px-3 py-2 text-[12px] font-bold text-blue-700 hover:bg-blue-50">Log in</button><button type="button" onClick={() => { setName("Demo user"); setBootStage("profile"); }} className="rounded-full border border-blue-200 bg-white px-3 py-2 text-[12px] font-bold text-blue-700 hover:bg-blue-50">Sign up</button></div>
-            <button type="button" onClick={() => { setName("Visitor"); setBootStage("profile"); }} className="mt-3 w-full rounded-full bg-blue-600 px-3 py-3 text-[13px] font-bold text-white">Visitor demo</button>
+            <div className="text-[11px] font-bold uppercase tracking-[.28em] text-blue-600">MY CLUSTER</div>
+            <div className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">Centro de Mando</div>
+            <div className="mt-1 max-w-[240px] text-[12px] leading-snug text-slate-600">Movilidad sostenible de tu equipo, en tiempo real.</div>
+            <input data-testid="mc-email" type="email" value={mcEmail} onChange={(e) => setMcEmail(e.target.value)} placeholder="Email" autoComplete="username" className="mt-4 w-full rounded-full border border-blue-100 bg-white px-4 py-2 text-center text-[13px] text-slate-900 outline-none focus:border-blue-300" />
+            <input data-testid="mc-password" type="password" value={mcPw} onChange={(e) => setMcPw(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doLogin(); }} placeholder="Contraseña" autoComplete="current-password" className="mt-2 w-full rounded-full border border-blue-100 bg-white px-4 py-2 text-center text-[13px] text-slate-900 outline-none focus:border-blue-300" />
+            {mcError && <div data-testid="mc-login-error" className="mt-2 max-w-[240px] text-[11px] font-semibold leading-tight text-red-600">{mcError}</div>}
+            <button type="button" data-testid="mc-login-btn" onClick={doLogin} disabled={mcBusy} className="mt-3 w-full rounded-full bg-blue-600 px-3 py-2.5 text-[13px] font-bold text-white disabled:opacity-60">{mcBusy ? "Entrando…" : "Entrar"}</button>
+            <button type="button" data-testid="mc-sample-btn" onClick={enterSample} className="mt-2 w-full rounded-full border border-blue-200 bg-white px-3 py-2 text-[12px] font-bold text-blue-700 hover:bg-blue-50">Explorar con datos de ejemplo</button>
           </> : <>
             <div className="text-[11px] font-bold uppercase tracking-[.24em] text-blue-600">Configurar sesión</div>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" className="mt-4 w-full rounded-full border border-blue-100 bg-white px-4 py-2 text-center text-[14px] text-slate-900 outline-none focus:border-blue-300" />
             <input value={manualLocation} onChange={(e) => setManualLocation(e.target.value)} placeholder="Ubicación escrita" className="mt-2 w-full rounded-full border border-blue-100 bg-white px-4 py-2 text-center text-[14px] text-slate-900 outline-none focus:border-blue-300" />
-            <button type="button" onClick={() => complete(true)} className="mt-4 w-full rounded-full bg-blue-600 px-3 py-3 text-[13px] font-bold text-white">Aceptar localización</button>
-            <button type="button" onClick={() => complete(false)} className="mt-2 w-full rounded-full border border-blue-200 bg-white px-3 py-2 text-[12px] font-bold text-blue-700">Usar ubicación escrita</button>
+            <button type="button" data-testid="mc-accept-geo" onClick={() => complete(true)} className="mt-4 w-full rounded-full bg-blue-600 px-3 py-3 text-[13px] font-bold text-white">Aceptar localización</button>
+            <button type="button" data-testid="mc-accept-manual" onClick={() => complete(false)} className="mt-2 w-full rounded-full border border-blue-200 bg-white px-3 py-2 text-[12px] font-bold text-blue-700">Usar ubicación escrita</button>
           </>}
         </div>
       </div>
