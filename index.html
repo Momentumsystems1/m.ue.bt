@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#d9d6c6"><title>ROAD COMMAND CENTER — GEM / PC1512</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="joinView" hidden>
+  <div class="share-window"><header class="gem-title">▣ MOMENTUM \ LOCATION SHARE <span>□</span></header>
+    <div class="share-body"><div class="share-icon">◉</div><h1>Compartir ubicación</h1><p>Has recibido una invitación privada para participar en un círculo de BAYMOVE. Solo comparte si aceptas. Tu ubicación se enviará directamente al organizador mientras esta página esté abierta.</p>
+      <label>Tu nombre <input id="joinName" autocomplete="given-name" maxlength="24" placeholder="Nombre visible"></label><button id="joinStart" class="primary">Aceptar y compartir ubicación</button><button id="joinStop">Dejar de compartir</button><p id="joinStatus" role="status">Sin compartir.</p><small>No se guarda un historial en esta demo. El servicio de señalización de PeerJS puede tratar metadatos de conexión; no uses esta prueba para seguimiento crítico.</small>
+    </div>
+  </div>
+</div>
+<div id="app">
+  <header class="gem-menubar" role="banner"><div class="menu-items"><b class="desk-logo">◈</b><button data-menu="desk">Desk</button><button data-menu="file">File</button><button data-menu="view">View</button><button data-menu="options">Options</button></div><div class="top-brand"><span class="mini-status" id="connectionDot"></span> AMSTRAD PC1512 · GEM DESKTOP 2.0 <strong>ROAD COMMAND / G3000</strong></div></header>
+  <section class="gem-toolbar"><span>DRIVE C: \ MOMENTUM \ ROAD_COMMAND.EXE</span><div class="toolbar-right"><span id="dateClock">15 OCT 2026</span><span class="demo-pill">PRESENTACIÓN / DEMO</span></div></section>
+  <main class="desktop">
+    <section class="window nav-window" aria-label="Herramientas">
+      <header class="window-title"><span class="window-control">■</span> C:\TOOLS\COMMAND.APP <span class="title-chrome">▤</span></header>
+      <div class="inside nav-content">
+        <div class="small-heading">UNIDAD DE CONTROL</div>
+        <div class="file-icons"><button class="file-icon active" data-action="mode-route"><span>▤</span>RUTAS</button><button class="file-icon" data-action="mode-circle"><span>◎</span>CÍRCULO</button><button class="file-icon" data-action="mode-monitor"><span>◈</span>VIGILAR</button><button class="file-icon" data-action="show-poi"><span>▥</span>CAPAS</button></div>
+        <fieldset class="gem-group"><legend>01 · POSICIONAMIENTO</legend><div class="field-label">Ciudad</div><div class="button-wrap city-buttons"><button data-city="barcelona" class="selected">BCN</button><button data-city="madrid">MAD</button><button data-city="valencia">VLC</button><button data-city="bilbao">BIO</button></div>
+          <label class="field-label" for="address">Dirección a localizar / monitorizar</label><input id="address" type="search" placeholder="Calle, ciudad, país"><button id="searchBtn" class="wide">⌕ Localizar dirección</button><div class="tiny" id="addressFeedback">Seleccione una dirección o pulse el mapa.</div><button id="monitorBtn" class="wide" disabled>◈ Vigilar este punto</button></fieldset>
+        <fieldset class="gem-group"><legend>02 · PLANIFICADOR DE RUTA</legend><div class="field-label">Origen <span id="startLabel" class="coordinate">Sin fijar</span></div><div class="button-wrap"><button id="setStart">● Seleccionar origen</button><button id="useGps">⌖ Mi GPS</button></div><div class="field-label">Destino <span id="endLabel" class="coordinate">Sin fijar</span></div><div class="button-wrap"><button id="setEnd">⚑ Seleccionar destino</button><button id="setStop">＋ Añadir parada</button></div><div id="stopsList" class="stops-list tiny">Sin paradas.</div><button id="routeBtn" class="wide primary">► Calcular ruta</button><button id="openGoogleRoute" class="wide">↗ Abrir navegación Google</button></fieldset>
+        <fieldset class="gem-group"><legend>03 · CAPAS VISIBLES</legend><label class="checkrow"><input id="layerFuel" type="checkbox"> ⛽ Gasolineras / paradas</label><label class="checkrow"><input id="layerCharge" type="checkbox"> ⚡ Carga eléctrica</label><label class="checkrow"><input id="layerParking" type="checkbox"> ▣ Aparcamientos</label><label class="checkrow"><input id="layerHealth" type="checkbox"> ✚ Centros sanitarios</label><label class="checkrow"><input id="layerTraffic" type="checkbox"> ▨ Tráfico TomTom / Google</label><button id="refreshLayers" class="wide">Actualizar capas visibles</button></fieldset>
+        <div class="small-heading nav-bottom">CONTROL CENTER / MOMENTUM SYSTEMS</div>
+      </div>
+    </section>
+    <section class="window map-window" aria-label="Mapa de operaciones">
+      <header class="window-title"><span class="window-control">■</span> C:\MAPS\EUROPE.MAP <span class="window-headright" id="mapPosition">41.387 · 2.170</span></header>
+      <div class="map-shell"><div class="map-top"><div class="map-switch"><button id="btnMapLibre" class="selected">GEM · MAPA LIBRE</button><button id="btnGoogle">GOOGLE MAPS</button></div><div class="map-actions"><button id="map2d" class="selected">2D</button><button id="map3d">3D</button><button id="mapFullscreen" title="Pantalla completa">□</button></div></div>
+        <div id="map" class="map-canvas"></div><div id="googleMap" class="map-canvas" hidden></div>
+        <div id="mapHint" class="map-hint">Haz clic para seleccionar el origen; clic derecho para crear una quedada.</div><div class="map-credit">MAPA REAL · OPENFREEMAP · OSM <span id="mapDataState">RED: CONECTANDO</span></div>
+      </div>
+      <div class="map-status"><span id="coordinateReadout">POS: —</span><span id="routeSummary">RUTA: SIN CALCULAR</span><span id="mapActionState">MODO: ORIGEN</span></div>
+    </section>
+    <section class="window info-window" aria-label="Información operacional">
+      <header class="window-title"><span class="window-control">■</span> C:\OPERATIONS\STATUS.APP <span class="title-chrome">▤</span></header>
+      <div class="inside info-scroll">
+        <fieldset class="gem-group"><legend>METEO Y CALIDAD DEL AIRE</legend><div class="readout-grid"><div class="readout"><small>TEMPERATURA</small><b id="temperature">—</b></div><div class="readout"><small>RÁFAGAS 10 m</small><b id="windGust">—</b></div><div class="readout"><small>VIENTO</small><b id="windSpeed">—</b></div><div class="readout"><small>AQI EUROPEO</small><b id="airQuality">—</b></div></div><div id="weatherState" class="source-indicator">Conectando con Open-Meteo…</div></fieldset>
+        <fieldset class="gem-group"><legend>TRÁFICO E INCIDENCIAS</legend><div class="traffic-head"><span id="trafficStatus">TomTom: sin clave</span><button id="reloadTraffic">↻</button></div><div id="incidentList" class="event-list"><p class="muted">Conecta una clave TomTom de navegador para incidencias reales.</p></div></fieldset>
+        <fieldset class="gem-group"><legend>CÍRCULO Y CONVOY</legend><div class="button-wrap"><button id="createCircle" class="primary">◎ Crear círculo</button><button id="copyInvites">⧉ Invitar (2)</button></div><div id="circleCode" class="tiny">Círculo no iniciado.</div><div id="peopleList" class="people-list"><div class="person"><i class="off"></i> No hay participantes conectados</div></div><button id="startConvoy" class="wide">▶ Simular convoy</button><button id="stopConvoy" class="wide" disabled>■ Detener convoy</button><div class="tiny">Convoy: <strong id="convoyState">INACTIVO</strong> · los vehículos ficticios se identifican en el mapa.</div></fieldset>
+        <fieldset class="gem-group"><legend>QUEDADA INMEDIATA</legend><div class="tiny" id="meetInfo">Clic derecho en el mapa o selecciona el modo QUEDADA.</div><button id="meetBtn" class="wide primary">◎ Crear quedada aquí</button><button id="copyMeet" class="wide" disabled>⧉ Copiar enlace de quedada</button></fieldset>
+        <fieldset class="gem-group"><legend>PROVEEDORES / API</legend><div class="tiny">Introducir claves restringidas para esta sesión. Nunca se publican en el repositorio.</div><label class="field-label" for="googleKey">Google Maps JS (navegador)</label><input id="googleKey" type="password" autocomplete="off" placeholder="Google API key"><label class="field-label" for="tomtomKey">TomTom Traffic (navegador)</label><input id="tomtomKey" type="password" autocomplete="off" placeholder="TomTom API key"><button id="applyKeys" class="wide">Aplicar credenciales temporales</button><div id="providerFeedback" class="tiny">Ninguna clave configurada.</div></fieldset>
+      </div>
+    </section>
+  </main>
+  <footer class="gem-footer"><span>ROAD COMMAND CENTER v0.5 / GEM / MOMENTUM SYSTEMS</span><span id="footerLive">OSM: CONECTANDO</span><span>F3 = CAPAS · F5 = ACTUALIZAR · ESC = CANCELAR</span></footer>
+  <section class="window logs-window"><header class="window-title"><span class="window-control">■</span> C:\LOGS\EVENTS.LOG <span class="title-chrome">▲</span></header><div class="logs-body" id="logBody"><div>ROAD COMMAND CENTER · PRESENTACIÓN EJECUTIVA</div></div></section>
+  <div id="dialogOverlay" class="modal-overlay" hidden><section class="dialog-window"><header class="window-title">■ MENSAJE DEL SISTEMA <button id="closeDialog">×</button></header><div id="dialogContent" class="inside"></div><div class="dialog-actions"><button id="confirmDialog" class="primary">Aceptar</button></div></section></div>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <script src="./app.js" defer></script>
+</div>
+</body>
+</html>
